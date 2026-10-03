@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
+<title>GD3D Visual Editor v0.78 — Performance / APK Prep</title>
+<style>
+:root{--bg:#101217;--panel:#181c24;--panel2:#202632;--text:#edf2f7;--muted:#9aa5b1;--line:#313947;--accent:#4ea3ff;--good:#55d187;--warn:#f7c35f;--danger:#ff6b6b}
+*{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;font-size:14px;overscroll-behavior:none}
+button,input,select{font:inherit} button{border:1px solid var(--line);background:var(--panel2);color:var(--text);border-radius:8px;padding:8px 11px} button:active{transform:translateY(1px)} button.primary{background:#1c5f9f;border-color:#2f7cc3}.danger{color:#ffb1b1}.good{color:var(--good)}
+#top{position:sticky;top:0;z-index:20;background:#11151cdd;backdrop-filter:blur(8px);border-bottom:1px solid var(--line);padding:8px;display:flex;gap:7px;align-items:center;flex-wrap:wrap}.brand{font-weight:750;margin-right:auto}.tiny{color:var(--muted);font-size:12px}
+#tabs{display:flex;gap:4px;padding:8px 8px 0}.tab{flex:1}.tab.active{background:#285f94}
+.view{display:none;padding:8px}.view.active{display:block}.grid2{display:grid;grid-template-columns:minmax(0,1.7fr) minmax(300px,.8fr);gap:8px}@media(max-width:850px){.grid2{grid-template-columns:1fr}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px;min-width:0}.card h3{margin:0 0 8px;font-size:14px}.toolbar{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}
+canvas{display:block;width:100%;background:#0b0e13;border:1px solid var(--line);border-radius:8px;touch-action:none}.canvasWrap{position:relative}.badge{position:absolute;top:8px;left:8px;background:#10141ccc;padding:4px 7px;border-radius:6px;color:var(--muted);font-size:12px;pointer-events:none}.budgetHud{position:absolute;right:8px;top:8px;min-width:180px;background:#0d121acc;border:1px solid #344254;border-radius:8px;padding:7px 9px;font-size:11px;line-height:1.45;pointer-events:none;backdrop-filter:blur(6px)}.budgetHud strong{font-size:12px}.budgetHud .ok{color:#69df91}.budgetHud .warn{color:#ffd36b}.budgetHud .bad{color:#ff7777}.budgetBar{height:5px;background:#26303b;border-radius:99px;overflow:hidden;margin-top:3px}.budgetFill{height:100%;background:#55d187;width:0%}.budgetFill.warn{background:#f7c35f}.budgetFill.bad{background:#ff6b6b}
+.row{display:grid;grid-template-columns:100px 1fr;gap:8px;align-items:center;margin:6px 0}.row label{color:var(--muted)}.row input,.row select{width:100%;background:#0f131a;color:var(--text);border:1px solid var(--line);border-radius:7px;padding:7px}.vec{display:grid;grid-template-columns:repeat(3,1fr);gap:4px}.vec2{display:grid;grid-template-columns:repeat(2,1fr);gap:4px}
+.objlist,.keylist{max-height:300px;overflow:auto;border:1px solid var(--line);border-radius:8px}.item{padding:8px;border-bottom:1px solid #29303b;display:flex;align-items:center;gap:7px}.item:last-child{border-bottom:none}.item.sel{background:#263b52}.item.activeSel{box-shadow:inset 3px 0 #fff}.multiCount{color:#9fe3ff;font-size:12px;font-weight:700}.item .name{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.swatch{width:14px;height:14px;border-radius:3px;border:1px solid #ffffff55}
+.sep{height:1px;background:var(--line);margin:10px 0}.status{padding:8px;border-radius:8px;background:#0f131a;border:1px solid var(--line);white-space:pre-wrap}.hint{color:var(--muted);line-height:1.45}.pill{padding:2px 6px;border:1px solid var(--line);border-radius:999px;color:var(--muted);font-size:11px}
+#toast{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);padding:9px 12px;background:#1e2938;border:1px solid #415068;border-radius:8px;opacity:0;pointer-events:none;transition:.2s;z-index:99}#toast.show{opacity:1}
+textarea{width:100%;min-height:160px;background:#0c1016;color:#dbe8f5;border:1px solid var(--line);border-radius:8px;padding:8px;font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:12px}.downloadLink{display:inline-block;padding:9px 11px;margin:4px 5px 4px 0;border:1px solid #3d78aa;border-radius:8px;background:#173e61;color:#eaf5ff;text-decoration:none;font-weight:650}.downloadLink.secondary{border-color:#52606d;background:#202a34}
+
+.projectStatus{font-size:11px;color:var(--muted);padding:3px 7px;border:1px solid #374151;border-radius:999px;white-space:nowrap}.projectStatus.saved{color:#75df9a;border-color:#356c49}.projectStatus.dirty{color:#ffd36b;border-color:#725d2b}.modalBack{position:fixed;inset:0;background:#05080db8;z-index:120;display:none;align-items:center;justify-content:center;padding:14px}.modalBack.show{display:flex}.modalCard{width:min(680px,100%);max-height:84vh;overflow:auto;background:#171c24;border:1px solid #3b4656;border-radius:12px;padding:12px;box-shadow:0 18px 60px #000a}.modalHead{display:flex;align-items:center;gap:8px;margin-bottom:10px}.modalHead strong{font-size:15px}.modalHead button{margin-left:auto}.recentItem{border:1px solid #303947;border-radius:9px;padding:9px;margin:7px 0;background:#10151d}.recentItem .recentMeta{color:var(--muted);font-size:11px;margin-top:3px}.recentActions{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}.recoverBox{border:1px solid #66562b;background:#292313;border-radius:9px;padding:9px;margin:8px 0}.storageWarn{color:#ffcf74;font-size:12px;line-height:1.4}
+
+
+/* v0.78 performance / APK prep */
+.perfHud{position:absolute;right:8px;bottom:8px;background:#111820dd;border:2px solid #536473;border-radius:7px;padding:5px 7px;font-size:9px;line-height:1.35;color:#d8e3ea;pointer-events:none;box-shadow:0 2px 0 #0008}
+.preflightBox{border:2px solid #52616d;background:#171e24;border-radius:8px;padding:8px;margin:8px 0;font-size:11px;line-height:1.45}.preflightBox.ok{border-color:#398654}.preflightBox.warn{border-color:#ae8235}.preflightBox.bad{border-color:#a94747}.preflightBox .pfTitle{font-size:12px;margin-bottom:3px}.preflightBox ul{margin:4px 0 0 18px;padding:0}.preflightBox li{margin:2px 0}
+@media(max-width:700px){.perfHud{right:5px;bottom:5px;font-size:8px;padding:4px 5px}.preflightBox{font-size:9px;padding:6px}}
+</style>
+
+<style id="gdStyleV077">
+:root{
+ --bg:#17202a;--panel:#394650;--panel2:#465663;--text:#fff6dc;--muted:#d6d0b8;--line:#111820;
+ --accent:#43aef5;--good:#71dc39;--warn:#ffd64a;--danger:#ff5d58;
+ --gd-blue:#168ad0;--gd-blue2:#0a639f;--gd-green:#72d938;--gd-green2:#3b9f22;
+ --gd-brown:#74532e;--gd-brown2:#4b331e;--gd-gold:#f5c64a;--gd-dark:#222a31;
+}
+html,body{background:linear-gradient(#273541,#18232b);min-height:100%;}
+body{font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;font-weight:650;letter-spacing:.1px}
+#top{
+ background:linear-gradient(#8c6737,#5d4025);border-bottom:3px solid #2a1c10;
+ box-shadow:0 3px 0 #0008, inset 0 1px 0 #d5a667;padding:7px 8px;gap:6px;
+ backdrop-filter:none;
+}
+.brand{font-weight:950;letter-spacing:1px;text-shadow:0 2px 0 #1b1009;font-size:15px;color:#fff7cf}
+.pill{background:#2b241c;border:2px solid #e6bd54;color:#ffe894;font-weight:900;box-shadow:inset 0 0 0 1px #17110d}
+.projectStatus{color:#ffe8a6!important;background:#3c2a18;border:1px solid #a77a3e;border-radius:6px;padding:4px 7px}
+button,.downloadLink{
+ border:2px solid #14202a;border-radius:7px;padding:7px 10px;color:#fff;
+ font-weight:850;text-shadow:0 1px 1px #000b;
+ background:linear-gradient(#567083,#344754);
+ box-shadow:inset 0 2px 0 #ffffff2b, inset 0 -2px 0 #0004, 0 2px 0 #0d1217;
+}
+button:active,.downloadLink:active{transform:translateY(2px);box-shadow:inset 0 2px 0 #0004}
+button.primary,#buildGmdBtn,#saveProjectBtn,#editCamera3DBtn{
+ background:linear-gradient(#8ee84c,#49ae28);border-color:#245b18;
+ box-shadow:inset 0 2px 0 #d9ffad,inset 0 -3px 0 #267718,0 2px 0 #10260b;
+}
+button.danger,#deleteBtn,#deleteKeyBtn{background:linear-gradient(#ff7a69,#c93d38);border-color:#711f1b}
+#undoBtn,#redoBtn{background:linear-gradient(#42b9ef,#1877bd);border-color:#114f7a}
+#tabs{gap:7px;padding:9px 8px 3px;background:#1a242d}
+.tab{border-radius:8px 8px 4px 4px;padding:10px 8px;background:linear-gradient(#39b8f7,#176fae);border:2px solid #0b4975;font-size:12px;letter-spacing:.8px;box-shadow:inset 0 2px 0 #a4e6ff,inset 0 -3px 0 #0c527f}
+.tab.active{background:linear-gradient(#8fe64d,#4aae2c);border-color:#2e741d;box-shadow:inset 0 2px 0 #d7ffb4,inset 0 -3px 0 #2b7c1c;color:white}
+.view{padding:8px!important}
+.card{background:linear-gradient(#475763,#34424d);border:3px solid #202930;border-radius:9px;box-shadow:inset 0 0 0 2px #6b7a84,0 3px 0 #111820;padding:9px!important}
+.card h3{margin:0 0 8px;padding:7px 10px;border-radius:6px;background:linear-gradient(#2e9ed9,#166797);border:2px solid #0b476c;color:#fff;text-align:center;font-size:12px;letter-spacing:1px;text-shadow:0 1px 1px #000}
+.toolbar{gap:5px!important;background:#28343d;border:2px solid #192229;border-radius:7px;padding:6px!important;overflow-x:auto;overscroll-behavior-x:contain;scrollbar-width:none}
+.toolbar::-webkit-scrollbar{display:none}
+.toolbar button{white-space:nowrap;min-height:34px}
+#modeMove,#modeRotate,#modeScale{min-width:70px}
+#modeMove.primary,#modeRotate.primary,#modeScale.primary{background:linear-gradient(#f2cc49,#c48922);border-color:#765016;box-shadow:inset 0 2px 0 #fff0a7,inset 0 -3px 0 #956317,0 2px 0 #30200a}
+.canvasWrap{border:3px solid #171e24!important;border-radius:8px!important;background:#12181d;box-shadow:inset 0 0 0 2px #51606b,0 2px 0 #0c1115;overflow:hidden}
+canvas{background:radial-gradient(circle at center,#26353f,#141d23)!important}
+.badge{background:#151b20dd!important;border:2px solid #586670!important;color:#fff0b2!important;border-radius:6px!important;font-weight:750}
+.budgetHud{background:#181f24e8!important;border:2px solid #71818d!important;border-radius:7px!important;box-shadow:0 2px 0 #0008,inset 0 0 0 1px #202a31}
+.objlist,.keylist{background:#242e35;border:2px solid #171f25;border-radius:6px}
+.item{border-bottom:2px solid #172127!important;background:#2e3a43}
+.item:nth-child(even){background:#33414a}
+.item.sel{background:#285d7a!important}.item.activeSel{box-shadow:inset 5px 0 #ffd541!important}
+.row input,.row select,textarea,select,input{background:#202a31!important;color:#fff4d1!important;border:2px solid #182127!important;border-radius:6px!important}
+.status{background:#242e35!important;border:2px solid #182127!important}
+.sep{background:#1e282f!important;height:2px!important}
+.hint,.tiny,.row label{color:#ddd5b8!important}
+#previewCanvas{border:3px solid #141c21;border-radius:6px}
+.downloadLink{display:inline-block;text-decoration:none;margin:3px;background:linear-gradient(#8ee84c,#49ae28);border-color:#245b18}
+.downloadLink.secondary{background:linear-gradient(#43bdf1,#217caf);border-color:#145476}
+.modalCard{background:#3b4954!important;border:3px solid #182026!important;box-shadow:inset 0 0 0 2px #667681,0 8px 25px #000a!important}
+.modalHead{background:linear-gradient(#2b9fd9,#176b9a);margin:-10px -10px 10px;padding:8px;border-radius:6px 6px 0 0}
+#toast{background:#252f36!important;border:2px solid #778993!important;color:#fff0bb!important;font-weight:800!important}
+@media(max-width:760px){
+ body{font-size:12px}
+ #top{position:sticky;display:grid;grid-template-columns:auto 1fr repeat(3,auto);padding:5px}
+ .brand{grid-column:1/3;font-size:13px}.projectStatus{font-size:10px;justify-self:end}
+ #top button{padding:6px 7px;font-size:10px}
+ #top #newBtn,#top #loadProjectBtn,#top #recentBtn,#top #importBtn,#top #exportBtn{display:none}
+ #tabs{position:sticky;top:75px;z-index:19;padding-top:5px}
+ .tab{padding:9px 4px;font-size:10px}
+ .grid2{grid-template-columns:1fr!important}
+ .card{padding:6px!important}
+ .toolbar{flex-wrap:nowrap!important}
+ .toolbar button{font-size:10px;padding:6px 8px}
+ #topCanvas,#camCanvas{height:52vh!important;min-height:340px}
+ #previewCanvas{height:auto!important}
+ .budgetHud{font-size:9px!important;min-width:145px!important;right:5px!important;top:5px!important}
+ .badge{font-size:9px!important;max-width:72%;white-space:normal!important}
+ .objlist,.keylist{max-height:210px}
+ .row{grid-template-columns:82px 1fr!important}
+}
+
+/* v0.78 performance / APK prep */
+.perfHud{position:absolute;right:8px;bottom:8px;background:#111820dd;border:2px solid #536473;border-radius:7px;padding:5px 7px;font-size:9px;line-height:1.35;color:#d8e3ea;pointer-events:none;box-shadow:0 2px 0 #0008}
+.preflightBox{border:2px solid #52616d;background:#171e24;border-radius:8px;padding:8px;margin:8px 0;font-size:11px;line-height:1.45}.preflightBox.ok{border-color:#398654}.preflightBox.warn{border-color:#ae8235}.preflightBox.bad{border-color:#a94747}.preflightBox .pfTitle{font-size:12px;margin-bottom:3px}.preflightBox ul{margin:4px 0 0 18px;padding:0}.preflightBox li{margin:2px 0}
+@media(max-width:700px){.perfHud{right:5px;bottom:5px;font-size:8px;padding:4px 5px}.preflightBox{font-size:9px;padding:6px}}
+</style>
+
+<style id="gdFontV0771">
+/* Geometry Dash-style typography. If Pusab is installed on the device/browser,
+   it is used automatically; otherwise the chunky local fallback stack keeps
+   the editor fully offline. */
+:root{--gd-font:"Pusab","Arial Rounded MT Bold","Arial Black",Impact,"Trebuchet MS",sans-serif}
+body,button,input,select,.downloadLink,.brand,.tab,.card h3,.item,.badge,.budgetHud,.pill,.projectStatus,.status,.hint,.tiny,.row label,#toast,.modalCard,.modalHead,.recentItem{
+  font-family:var(--gd-font)!important;
+}
+body{font-weight:700;letter-spacing:.15px}
+.brand,.tab,.card h3,button,.downloadLink{
+  letter-spacing:.45px;
+}
+.brand,.tab,.card h3{
+  -webkit-text-stroke:.25px #0008;
+  text-shadow:0 2px 0 #0008;
+}
+button,.downloadLink{
+  -webkit-text-stroke:.15px #0007;
+  text-shadow:0 1.5px 0 #0009;
+}
+/* Keep editable data/code areas readable. */
+textarea,#jsonText,#sceneText,.jsonText,.code,.mono{
+  font-family:ui-monospace,SFMono-Regular,Consolas,monospace!important;
