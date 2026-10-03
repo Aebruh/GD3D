@@ -14,3 +14,6 @@ function setFileLink(kind,text,filename,mime){
   };
   $('#saveLinks').style.display='block';return a;
 }
+
+// v0.80.4 UI-only patch: compact bars + full-screen BUILD viewport.
+(()=>{const s=document.createElement('script');s.src='ui_focus_v0804.js';document.head.appendChild(s)})();
