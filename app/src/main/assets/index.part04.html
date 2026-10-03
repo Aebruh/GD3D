@@ -1,0 +1,69 @@
+ for(const f of geometryFaces()){if(f.v.length<3)continue;const pr=f.v.map(p=>editorProject(p,cv));if(pr.some(x=>!x))continue;const n=norm(cross(sub(f.v[1],f.v[0]),sub(f.v[2],f.v[0]))),fc=f.v.reduce((a,p)=>a.map((x,i)=>x+p[i]/f.v.length),[0,0,0]);if(dot(n,sub(cam.eye,fc))<=0)continue;const light=.52+.48*Math.abs(dot(n,norm([.35,.8,-.45])));draw.push({pr,depth:pr.reduce((a,p)=>a+p[2],0)/pr.length,color:shadeHex(f.color,.62+.45*light)})}
+ draw.sort((a,b)=>b.depth-a.depth);for(const f of draw){ctx.beginPath();ctx.moveTo(f.pr[0][0],f.pr[0][1]);for(let i=1;i<f.pr.length;i++)ctx.lineTo(f.pr[i][0],f.pr[i][1]);ctx.closePath();ctx.fillStyle=f.color;ctx.fill();ctx.strokeStyle='#ffffff18';ctx.lineWidth=1;ctx.stroke()}
+ // camera path and keyframes in 3D
+ const ks=scene.camera.keys;for(let i=0;i<ks.length-1;i++){const a=editorProject(ks[i].eye,cv),b=editorProject(ks[i+1].eye,cv),ta=editorProject(ks[i].target,cv),tb=editorProject(ks[i+1].target,cv);if(a&&b){ctx.strokeStyle='#49d7ffcc';ctx.lineWidth=2.5;ctx.beginPath();ctx.moveTo(a[0],a[1]);ctx.lineTo(b[0],b[1]);ctx.stroke()}if(ta&&tb){ctx.save();ctx.setLineDash([6,5]);ctx.strokeStyle='#ffd86a66';ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(ta[0],ta[1]);ctx.lineTo(tb[0],tb[1]);ctx.stroke();ctx.restore()}}
+ ks.forEach((k,i)=>{const e=editorProject(k.eye,cv),t=editorProject(k.target,cv);if(!e)return;if(t){ctx.strokeStyle=i===selKey?'#76efff':'#3d7588';ctx.lineWidth=i===selKey?2:1;ctx.beginPath();ctx.moveTo(e[0],e[1]);ctx.lineTo(t[0],t[1]);ctx.stroke()}ctx.fillStyle=i===selKey?'#76efff':'#4a93a9';ctx.beginPath();ctx.arc(e[0],e[1],i===selKey?7:4,0,Math.PI*2);ctx.fill();ctx.fillStyle='#dbe8f5';ctx.font='11px system-ui';ctx.fillText(`${i} • ${k.t.toFixed(2)}s`,e[0]+9,e[1]-8);if(t){ctx.strokeStyle=i===selKey?'#ffd86a':'#8f7a46';ctx.lineWidth=i===selKey?2:1;ctx.beginPath();ctx.moveTo(t[0]-5,t[1]-5);ctx.lineTo(t[0]+5,t[1]+5);ctx.moveTo(t[0]+5,t[1]-5);ctx.lineTo(t[0]-5,t[1]+5);ctx.stroke()}});
+ // object centers + Blender-like XYZ transform gizmo
+ scene.objects.forEach((o,i)=>{const p=editorProject(editorObjectCenter(o),cv);if(!p)return;const isSel=selObjs.has(i)||i===selObj;ctx.fillStyle=isSel?(i===selObj?'#ffffff':'#8ee8ff'):'#9db0c2';ctx.beginPath();ctx.arc(p[0],p[1],isSel?6:4,0,Math.PI*2);ctx.fill();if(i===selObj){ctx.fillStyle='#fff';ctx.font='12px system-ui';ctx.fillText((o.name||o.type)+(selectedIndices().length>1?`  [${selectedIndices().length} selected]`:''),p[0]+13,p[1]-10)}});
+ if(camEditMode)drawCameraPointGizmo(ctx,cv);else drawTransformGizmo(ctx,cv);
+ // axis tripod
+ const base=[64,cv.height-62],len=34,axes=[[[1,0,0],'#ff6b6b','X'],[[0,1,0],'#6ee58b','Y'],[[0,0,1],'#58a7ff','Z']];for(const [v,col,label] of axes){const d=[dot(v,cam.R),-dot(v,cam.U)];ctx.strokeStyle=col;ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(...base);ctx.lineTo(base[0]+d[0]*len,base[1]+d[1]*len);ctx.stroke();ctx.fillStyle=col;ctx.fillText(label,base[0]+d[0]*len+4,base[1]+d[1]*len)}
+ perf.renderMs=perf.renderMs*.75+(performance.now()-__rt0)*.25;renderPerfHud();
+}
+function scheduleRender3D(){if(render3DQueued)return;render3DQueued=true;requestAnimationFrame(()=>{render3DQueued=false;renderScene3D()})}
+function renderPerfHud(){const el=$('#perfHud');if(!el)return;el.textContent=`Viewport ${perf.renderMs.toFixed(1)}ms • Budget ${perf.budgetMs.toFixed(0)}ms${perf.lastBuildMs?` • Build ${perf.lastBuildMs.toFixed(0)}ms`:''}`}
+function hitEditorObject(px,py,cv){let bi=-1,bd=28;scene.objects.forEach((o,i)=>{const p=editorProject(editorObjectCenter(o),cv);if(!p)return;const d=Math.hypot(px-p[0],py-p[1]);if(d<bd){bd=d;bi=i}});return bi}
+function hitEditorCam(px,py,cv){let best=null,bd=15;scene.camera.keys.forEach((k,i)=>{for(const kind of ['eye','target']){const p=editorProject(k[kind],cv);if(!p)continue;const d=Math.hypot(px-p[0],py-p[1]);if(d<bd){bd=d;best={i,kind}}}});return best}
+function frameEditorView(){
+ const pts=[];try{geometryFaces().forEach(f=>f.v.forEach(p=>pts.push(p)))}catch(e){}scene.camera.keys.forEach(k=>{pts.push(k.eye,k.target)});if(!pts.length)return;
+ const mn=[Infinity,Infinity,Infinity],mx=[-Infinity,-Infinity,-Infinity];pts.forEach(p=>p.forEach((v,i)=>{mn[i]=Math.min(mn[i],v);mx[i]=Math.max(mx[i],v)}));editorView.target=mn.map((v,i)=>(v+mx[i])/2);const r=Math.max(2,...pts.map(p=>Math.hypot(p[0]-editorView.target[0],p[1]-editorView.target[1],p[2]-editorView.target[2])));editorView.distance=clamp(r*2.3,4,180);renderScene3D()
+}
+function setEditorPreset(kind){if(kind==='top'){editorView.yaw=0;editorView.pitch=rad(89)}else if(kind==='front'){editorView.yaw=rad(180);editorView.pitch=0}else if(kind==='side'){editorView.yaw=rad(-90);editorView.pitch=0}else{editorView.yaw=rad(-35);editorView.pitch=rad(24)}renderScene3D()}
+function canvasXY(e,cv){const r=cv.getBoundingClientRect();return [(e.clientX-r.left)*cv.width/r.width,(e.clientY-r.top)*cv.height/r.height]}
+function moveSnapValue(){const e=$('#moveSnap');return e?Math.max(0,+e.value||0):0}
+function rotSnapValue(){const e=$('#rotSnap');return e?Math.max(0,+e.value||0):0}
+function scaleSnapValue(){const e=$('#scaleSnap');return e?Math.max(0,+e.value||0):0}
+function snapMove(v){const q=moveSnapValue();return q?Math.round(v/q)*q:v}
+function snapAngle(v){const q=rotSnapValue();return q?Math.round(v/q)*q:v}
+function snapScaleFactor(v){const q=scaleSnapValue();return q?Math.max(.02,Math.round(v/q)*q):Math.max(.02,v)}
+function gizmoInfo(cv){
+ const ids=selectedIndices();if(!ids.length)return null;const origin=selectionPivot(),p0=editorProject(origin,cv);if(!p0)return null;
+ const focal=(cv.height*.5)/Math.tan(rad(editorView.fov)*.5),worldPerPx=Math.max(.0001,p0[2]/focal),L=worldPerPx*82;
+ const axes=[{i:0,name:'X',v:[1,0,0],color:'#ff4d55'},{i:1,name:'Y',v:[0,1,0],color:'#62db76'},{i:2,name:'Z',v:[0,0,1],color:'#4f8dff'}];
+ axes.forEach(a=>{a.worldEnd=[origin[0]+a.v[0]*L,origin[1]+a.v[1]*L,origin[2]+a.v[2]*L];a.p1=editorProject(a.worldEnd,cv)});return {origin,p0,L,axes}
+}
+function ringWorldPoint(origin,axis,r,a){const c=Math.cos(a)*r,ss=Math.sin(a)*r;if(axis===0)return [origin[0],origin[1]+c,origin[2]+ss];if(axis===1)return [origin[0]+c,origin[1],origin[2]+ss];return [origin[0]+c,origin[1]+ss,origin[2]]}
+function gizmoRings(cv){const g=gizmoInfo(cv);if(!g)return null;const rings=[];for(const a of g.axes){const pts=[];for(let k=0;k<=64;k++)pts.push(editorProject(ringWorldPoint(g.origin,a.i,g.L*.82,Math.PI*2*k/64),cv));rings.push({...a,pts})}return {...g,rings}}
+function drawTransformGizmo(ctx,cv){const g=gizmoInfo(cv);if(!g)return;ctx.save();ctx.lineCap='round';ctx.lineJoin='round';
+ if(transformMode==='rotate'){
+   const rr=gizmoRings(cv);for(const a of rr.rings){ctx.strokeStyle=a.color;ctx.lineWidth=5;ctx.beginPath();let begun=false;for(const p of a.pts){if(!p){begun=false;continue}if(!begun){ctx.moveTo(p[0],p[1]);begun=true}else ctx.lineTo(p[0],p[1])}ctx.stroke();const lp=a.pts[Math.floor(a.pts.length*.12)]||a.pts.find(Boolean);if(lp){ctx.fillStyle=a.color;ctx.font='bold 13px system-ui';ctx.fillText(a.name,lp[0]+5,lp[1]-5)}}
+ }else{
+   for(const a of g.axes){if(!a.p1)continue;ctx.strokeStyle=a.color;ctx.fillStyle=a.color;ctx.lineWidth=5;ctx.beginPath();ctx.moveTo(g.p0[0],g.p0[1]);ctx.lineTo(a.p1[0],a.p1[1]);ctx.stroke();const dx=a.p1[0]-g.p0[0],dy=a.p1[1]-g.p0[1],ll=Math.hypot(dx,dy)||1,nx=dx/ll,ny=dy/ll,px=-ny,py=nx;
+     if(transformMode==='move'){ctx.beginPath();ctx.moveTo(a.p1[0],a.p1[1]);ctx.lineTo(a.p1[0]-nx*13+px*6,a.p1[1]-ny*13+py*6);ctx.lineTo(a.p1[0]-nx*13-px*6,a.p1[1]-ny*13-py*6);ctx.closePath();ctx.fill()}
+     else {ctx.fillRect(a.p1[0]-6,a.p1[1]-6,12,12)}
+     ctx.font='bold 13px system-ui';ctx.fillText(a.name,a.p1[0]+nx*9+px*4,a.p1[1]+ny*9+py*4)
+   }
+ }
+ ctx.fillStyle=transformMode==='scale'?'#ffd86a':'#f2f4f7';ctx.strokeStyle='#111820';ctx.lineWidth=2;ctx.beginPath();ctx.arc(g.p0[0],g.p0[1],transformMode==='scale'?9:6,0,Math.PI*2);ctx.fill();ctx.stroke();if(transformMode==='scale'){ctx.fillStyle='#111820';ctx.font='bold 10px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('U',g.p0[0],g.p0[1]+.5);ctx.textAlign='start';ctx.textBaseline='alphabetic'}ctx.restore()
+}
+function pointSegDist(px,py,a,b){const vx=b[0]-a[0],vy=b[1]-a[1],wx=px-a[0],wy=py-a[1],vv=vx*vx+vy*vy;if(vv<1e-9)return Math.hypot(wx,wy);const t=clamp((wx*vx+wy*vy)/vv,0,1),qx=a[0]+vx*t,qy=a[1]+vy*t;return Math.hypot(px-qx,py-qy)}
+function hitMoveScaleGizmo(px,py,cv){const g=gizmoInfo(cv);if(!g)return null;if(transformMode==='scale'&&Math.hypot(px-g.p0[0],py-g.p0[1])<13)return {uniform:true,origin:g.origin.slice(),L:g.L,p0:g.p0.slice()};let best=null,bd=14;for(const a of g.axes){if(!a.p1)continue;const d=pointSegDist(px,py,g.p0,a.p1);if(d<bd){bd=d;best={axis:a.i,origin:g.origin.slice(),axisVec:a.v.slice(),L:g.L,p0:g.p0.slice()}}}return best}
+function hitRotateGizmo(px,py,cv){const rr=gizmoRings(cv);if(!rr)return null;let best=null,bd=13;for(const a of rr.rings){for(let i=1;i<a.pts.length;i++){const p=a.pts[i-1],q=a.pts[i];if(!p||!q)continue;const d=pointSegDist(px,py,p,q);if(d<bd){bd=d;best={axis:a.i,origin:rr.origin.slice(),axisVec:a.v.slice(),p0:rr.p0.slice(),L:rr.L}}}}return best}
+function rayPlaneAxis(px,py,cv,origin,normal){const r=editorRay(px,py,cv),den=dot(r.d,normal);if(Math.abs(den)<1e-6)return null;const t=dot(sub(origin,r.o),normal)/den;if(t<0)return null;return [r.o[0]+r.d[0]*t,r.o[1]+r.d[1]*t,r.o[2]+r.d[2]*t]}
+function rotateDragVector(px,py,cv,origin,axis){const p=rayPlaneAxis(px,py,cv,origin,axis);if(p){const v=sub(p,origin),l=Math.hypot(...v);if(l>1e-6)return v.map(x=>x/l)}const p0=editorProject(origin,cv);if(!p0)return null;const a=Math.atan2(py-p0[1],px-p0[0]);const cam=editorCamera(),v2=[Math.cos(a),Math.sin(a)],w=norm([cam.R[0]*v2[0]-cam.U[0]*v2[1],cam.R[1]*v2[0]-cam.U[1]*v2[1],cam.R[2]*v2[0]-cam.U[2]*v2[1]]),proj=w.map((x,i)=>x-axis[i]*dot(w,axis)),l=Math.hypot(...proj);return l>1e-6?proj.map(x=>x/l):null}
+function signedAngleDeg(a,b,axis){return Math.atan2(dot(axis,cross(a,b)),clamp(dot(a,b),-1,1))*180/Math.PI}
+function shapeScaleSnapshot(o){if(o.type==='box')return {size:(o.size||[1,1,1]).map(Number)};if(o.type==='plane')return {size:(o.size||[1,1]).map(Number)};if(o.type==='cylinder')return {radius:+o.radius||.5,height:+o.height||1};return {}}
+function applyObjectScale(o,start,axis,factor,uniform=false){factor=Math.max(.02,factor);if(o.type==='box'){o.size=start.size.map((v,i)=>+(v*(uniform||i===axis?factor:1)).toFixed(4))}else if(o.type==='plane'){const ax=o.axis||'xz',map=ax==='xz'?[0,2]:ax==='xy'?[0,1]:[1,2];o.size=start.size.map((v,i)=>+(v*(uniform||map[i]===axis?factor:1)).toFixed(4))}else if(o.type==='cylinder'){if(uniform){o.radius=+(start.radius*factor).toFixed(4);o.height=+(start.height*factor).toFixed(4)}else if(axis===1)o.height=+(start.height*factor).toFixed(4);else o.radius=+(start.radius*factor).toFixed(4)}}
+function selectionTransformSnapshot(){return selectedIndices().map(i=>({i,center:v3(scene.objects[i].center),rotation:v3(scene.objects[i].rotation),shape:shapeScaleSnapshot(scene.objects[i])}))}
+function applySelectionMove(start,axis,delta){start.forEach(q=>{const o=scene.objects[q.i];o.center=v3(q.center);o.center[axis]=+snapMove(q.center[axis]+delta).toFixed(4)})}
+function rotatePointAxis(p,pivot,axis,deg){const a=rad(deg),c=Math.cos(a),s=Math.sin(a),q=sub(p,pivot);let r;if(axis===0)r=[q[0],q[1]*c-q[2]*s,q[1]*s+q[2]*c];else if(axis===1)r=[q[0]*c+q[2]*s,q[1],-q[0]*s+q[2]*c];else r=[q[0]*c-q[1]*s,q[0]*s+q[1]*c,q[2]];return r.map((v,i)=>+(v+pivot[i]).toFixed(4))}
+function applySelectionRotate(start,pivot,axis,delta){const d=snapAngle(delta);start.forEach(q=>{const o=scene.objects[q.i];o.center=rotatePointAxis(q.center,pivot,axis,d);o.rotation=v3(q.rotation);o.rotation[axis]=+(q.rotation[axis]+d).toFixed(3)})}
+function applySelectionScale(start,pivot,axis,factor,uniform){factor=snapScaleFactor(factor);start.forEach(q=>{const o=scene.objects[q.i],c=q.center.slice();for(let a=0;a<3;a++)if(uniform||a===axis)c[a]=pivot[a]+(c[a]-pivot[a])*factor;o.center=c.map(v=>+v.toFixed(4));applyObjectScale(o,q.shape,axis,factor,uniform)})}
+
+function cameraPointInfo(cv){
+ if(!camEditMode||!scene.camera.keys.length)return null;const i=clamp(camPointSel.i||0,0,scene.camera.keys.length-1),kind=camPointSel.kind==='target'?'target':'eye',origin=v3(scene.camera.keys[i][kind]),p0=editorProject(origin,cv);if(!p0)return null;
+ const focal=(cv.height*.5)/Math.tan(rad(editorView.fov)*.5),worldPerPx=Math.max(.0001,p0[2]/focal),L=worldPerPx*86;
+ const axes=[{i:0,name:'X',v:[1,0,0],color:'#ff4d55'},{i:1,name:'Y',v:[0,1,0],color:'#62db76'},{i:2,name:'Z',v:[0,0,1],color:'#4f8dff'}];
+ axes.forEach(a=>{a.worldEnd=[origin[0]+a.v[0]*L,origin[1]+a.v[1]*L,origin[2]+a.v[2]*L];a.p1=editorProject(a.worldEnd,cv)});return {i,kind,origin,p0,L,axes}
+}
+function drawCameraPointGizmo(ctx,cv){const g=cameraPointInfo(cv);if(!g)return;ctx.save();ctx.lineCap='round';for(const a of g.axes){if(!a.p1)continue;ctx.strokeStyle=a.color;ctx.fillStyle=a.color;ctx.lineWidth=5;ctx.beginPath();ctx.moveTo(g.p0[0],g.p0[1]);ctx.lineTo(a.p1[0],a.p1[1]);ctx.stroke();const dx=a.p1[0]-g.p0[0],dy=a.p1[1]-g.p0[1],ll=Math.hypot(dx,dy)||1,nx=dx/ll,ny=dy/ll,px=-ny,py=nx;ctx.beginPath();ctx.moveTo(a.p1[0],a.p1[1]);ctx.lineTo(a.p1[0]-nx*13+px*6,a.p1[1]-ny*13+py*6);ctx.lineTo(a.p1[0]-nx*13-px*6,a.p1[1]-ny*13-py*6);ctx.closePath();ctx.fill();ctx.font='bold 13px system-ui';ctx.fillText(a.name,a.p1[0]+nx*9+px*4,a.p1[1]+ny*9+py*4)}ctx.fillStyle=g.kind==='eye'?'#76efff':'#ffd86a';ctx.strokeStyle='#111820';ctx.lineWidth=2;ctx.beginPath();ctx.arc(g.p0[0],g.p0[1],7,0,Math.PI*2);ctx.fill();ctx.stroke();ctx.fillStyle='#fff';ctx.font='12px system-ui';ctx.fillText(`Key ${g.i} ${g.kind} • ${scene.camera.keys[g.i].t.toFixed(2)}s`,g.p0[0]+12,g.p0[1]-12);ctx.restore()}
