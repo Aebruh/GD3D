@@ -4,10 +4,33 @@ function facesFor(o){let fs=[];if(o.type==='box'){const [sx,sy,sz]=(o.size||[1,1
 },null)}
 function geometryFaces(){const all=[];for(const o of expandObjects()){const color=hex6(o.color);if(o.type==='box'){const [sx,sy,sz]=(o.size||[1,1,1]).map(Number),x=sx/2,y=sy/2,z=sz/2,v=[[-x,-y,-z],[x,-y,-z],[x,y,-z],[-x,y,-z],[-x,-y,z],[x,-y,z],[x,y,z],[-x,y,z]],ids=[[0,3,2,1],[4,5,6,7],[0,4,7,3],[1,2,6,5],[0,1,5,4],[3,7,6,2]],R=rotMat(o.rotation),c=v3(o.center),tv=p=>[0,1,2].map(i=>c[i]+R[i][0]*p[0]+R[i][1]*p[1]+R[i][2]*p[2]);ids.forEach(ix=>all.push({v:ix.map(i=>tv(v[i])),color}))}else if(o.type==='plane'){const s=o.size||[1,1],a=s[0]/2,b=s[1]/2,ax=o.axis||'xz';let v=ax==='xz'?[[-a,0,-b],[-a,0,b],[a,0,b],[a,0,-b]]:ax==='xy'?[[-a,-b,0],[a,-b,0],[a,b,0],[-a,b,0]]:[[0,-a,-b],[0,a,-b],[0,a,b],[0,-a,b]];if(o.flip)v=v.reverse();const R=rotMat(o.rotation),c=v3(o.center),tv=p=>[0,1,2].map(i=>c[i]+R[i][0]*p[0]+R[i][1]*p[1]+R[i][2]*p[2]);all.push({v:v.map(tv),color})}else if(o.type==='cylinder'){const n=Math.max(3,Math.round(o.sides||8)),r=+o.radius||.5,h=(+o.height||1)/2,bot=[],top=[],R=rotMat(o.rotation),c=v3(o.center),tv=p=>[0,1,2].map(i=>c[i]+R[i][0]*p[0]+R[i][1]*p[1]+R[i][2]*p[2]);for(let i=0;i<n;i++){const a=2*Math.PI*i/n;bot.push([r*Math.cos(a),-h,r*Math.sin(a)]);top.push([r*Math.cos(a),h,r*Math.sin(a)])}for(let i=0;i<n;i++){const j=(i+1)%n;all.push({v:[bot[i],top[i],top[j],bot[j]].map(tv),color})}if(o.caps!==false){all.push({v:[...top].reverse().map(tv),color});all.push({v:bot.map(tv),color})}}}return all}
 function sub(a,b){return a.map((x,i)=>x-b[i])}function dot(a,b){return a.reduce((s,x,i)=>s+x*b[i],0)}function cross(a,b){return [a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]]}function norm(a){const l=Math.hypot(...a)||1;return a.map(x=>x/l)}
-function drawPerspective(){const cv=$('#previewCanvas'),ctx=cv.getContext('2d');ctx.fillStyle='#11151c';ctx.fillRect(0,0,cv.width,cv.height);const t=+$('#timeSlider').value*duration(),cam=sampleCam(t),eye=cam.eye,target=cam.target,F=norm(sub(target,eye)),worldUp=Math.abs(F[1])>.98?[0,0,1]:[0,1,0],R=norm(cross(F,worldUp)),U=cross(R,F),scale=cv.width/560,center=[cv.width/2,cv.height/2],focal=263.055*scale,draw=[];
- for(const f of geometryFaces()){if(f.v.length<3)continue;const n=cross(sub(f.v[1],f.v[0]),sub(f.v[2],f.v[0]));if(dot(n,sub(eye,f.v[0]))<=0)continue;const q=f.v.map(p=>{const d=sub(p,eye);return [dot(d,R),dot(d,U),dot(d,F)]});if(q.every(p=>p[2]<=.15))continue;const xy=[];let bad=false,dep=0;for(const p of q){const z=Math.max(.15,p[2]);dep+=z;let x=center[0]+p[0]/z*focal,y=center[1]-p[1]/z*focal;xy.push([x,y]);if(!Number.isFinite(x+y))bad=true}if(!bad)draw.push({xy,depth:dep/q.length,color:f.color})}
- draw.sort((a,b)=>b.depth-a.depth);for(const f of draw){ctx.beginPath();ctx.moveTo(...f.xy[0]);for(let i=1;i<f.xy.length;i++)ctx.lineTo(...f.xy[i]);ctx.closePath();ctx.fillStyle='#'+f.color;ctx.fill()}
- ctx.strokeStyle='#ffffff33';ctx.strokeRect(0,0,cv.width,cv.height);$('#timeLabel').textContent=`${t.toFixed(2)} / ${duration().toFixed(2)} s`;renderPerfHud()}
+function drawPerspective(){
+ const cv=$('#previewCanvas'),ctx=cv.getContext('2d');ctx.fillStyle='#11151c';ctx.fillRect(0,0,cv.width,cv.height);
+ const t=+$('#timeSlider').value*duration(),cam=sampleCam(t),eye=cam.eye,target=cam.target,F=norm(sub(target,eye)),worldUp=Math.abs(F[1])>.98?[0,0,1]:[0,1,0],R=norm(cross(F,worldUp)),U=cross(R,F),scale=cv.width/560,center=[cv.width/2,cv.height/2],focal=263.055*scale,draw=[];
+ const sol=previewBspSolution();
+ if(sol&&sol.tree){
+   // Exact far-to-near BSP traversal. Long faces are split against relevant
+   // scene planes first, so a bridge deck cannot incorrectly cover a nearer
+   // post just because the deck's average depth is farther away.
+   for(const parent of bspPainter(sol.tree,eye)){
+     if(dot(parent.n,eye)-parent.d<=BSP_EPS)continue;
+     const pieces=sol.parentPieces.get(parent.key)||[parent];
+     for(const piece of pieces){
+       const q=piece.v.map(p=>{const d=sub(p,eye);return [dot(d,R),dot(d,U),dot(d,F)]});
+       if(q.every(p=>p[2]<=.15))continue;
+       const xy=[];let bad=false,dep=0;
+       for(const p of q){const z=Math.max(.15,p[2]);dep+=z;const x=center[0]+p[0]/z*focal,y=center[1]-p[1]/z*focal;xy.push([x,y]);if(!Number.isFinite(x+y))bad=true}
+       if(!bad)draw.push({xy,depth:dep/q.length,color:piece.color});
+     }
+   }
+ }else{
+   // Safety fallback if BSP preprocessing ever refuses a pathological scene.
+   for(const f of geometryFaces()){if(f.v.length<3)continue;const n=cross(sub(f.v[1],f.v[0]),sub(f.v[2],f.v[0]));if(dot(n,sub(eye,f.v[0]))<=0)continue;const q=f.v.map(p=>{const d=sub(p,eye);return [dot(d,R),dot(d,U),dot(d,F)]});if(q.every(p=>p[2]<=.15))continue;const xy=[];let bad=false,dep=0;for(const p of q){const z=Math.max(.15,p[2]);dep+=z;const x=center[0]+p[0]/z*focal,y=center[1]-p[1]/z*focal;xy.push([x,y]);if(!Number.isFinite(x+y))bad=true}if(!bad)draw.push({xy,depth:dep/q.length,color:f.color})}
+   draw.sort((a,b)=>b.depth-a.depth);
+ }
+ for(const f of draw){ctx.beginPath();ctx.moveTo(...f.xy[0]);for(let i=1;i<f.xy.length;i++)ctx.lineTo(...f.xy[i]);ctx.closePath();ctx.fillStyle='#'+f.color;ctx.fill()}
+ ctx.strokeStyle='#ffffff33';ctx.strokeRect(0,0,cv.width,cv.height);$('#timeLabel').textContent=`${t.toFixed(2)} / ${duration().toFixed(2)} s`;renderPerfHud()
+}
 function budgetClass(g){const q=g/999;return q>=.95?'bad':q>=.8?'warn':'ok'}
 function preflightWarnings(r){const a=[];if(!r)return a;const g=+r.gradients||0,gr=+r.groups||0,m=+r.move_triggers||0,o=+r.objects||0;if(g>999)a.push(['bad',`Gradient hard limit exceeded: ${g}/999`]);else if(g>=950)a.push(['bad',`Gradients critically high: ${g}/999`]);else if(g>=800)a.push(['warn',`Gradients getting high: ${g}/999`]);if(gr>9999)a.push(['bad',`Group hard limit exceeded: ${gr}/9999`]);else if(gr>=9000)a.push(['warn',`Group IDs getting high: ${gr}/9999`]);if(m>=30000)a.push(['warn',`Heavy motion: ${m.toLocaleString()} Move triggers`]);if(o>=60000)a.push(['warn',`Very large level: ${o.toLocaleString()} GD objects`]);if(r.mode==='close_camera')a.push(['warn','Close Camera clipping active — heavier than ordinary tracking/orbit']);return a}
 function renderPreflight(){const el=$('#preflightBox');if(!el)return;if(!liveBudget){el.className='preflightBox';el.innerHTML='<div class="pfTitle"><strong>PRE-FLIGHT</strong></div>Waiting for live budget…';return}if(!liveBudget.ok){el.className='preflightBox bad';el.innerHTML='<div class="pfTitle"><strong>PRE-FLIGHT FAILED</strong></div>'+liveBudget.error;return}const a=preflightWarnings(liveBudget.report);const worst=a.some(x=>x[0]==='bad')?'bad':a.length?'warn':'ok';el.className='preflightBox '+worst;el.innerHTML=`<div class="pfTitle"><strong>${a.length?'PRE-FLIGHT WARNINGS':'PRE-FLIGHT READY'}</strong></div>${a.length?'<ul>'+a.map(x=>`<li>${x[1]}</li>`).join('')+'</ul>':'Scene is within the current browser compiler budgets.'}`}
