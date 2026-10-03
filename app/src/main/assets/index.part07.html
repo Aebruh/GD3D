@@ -1,0 +1,95 @@
+function setTransformMode(m){transformMode=m;for(const [id,name] of [['#modeMove','move'],['#modeRotate','rotate'],['#modeScale','scale']]){$(id).classList.toggle('primary',m===name)}$('#moveSnapWrap').style.display=m==='move'?'flex':'none';$('#rotSnapWrap').style.display=m==='rotate'?'flex':'none';$('#scaleSnapWrap').style.display=m==='scale'?'flex':'none';renderScene3D();toast(m[0].toUpperCase()+m.slice(1)+' tool')}
+$('#modeMove').onclick=()=>setTransformMode('move');$('#modeRotate').onclick=()=>setTransformMode('rotate');$('#modeScale').onclick=()=>setTransformMode('scale');
+$('#moveSnap').onchange=()=>toast('Move snap: '+($('#moveSnap').value==='0'?'Off':$('#moveSnap').value));$('#rotSnap').onchange=()=>toast('Rotate snap: '+($('#rotSnap').value==='0'?'Off':$('#rotSnap').value+'°'));$('#scaleSnap').onchange=()=>toast('Scale snap: '+($('#scaleSnap').value==='0'?'Off':$('#scaleSnap').value));
+$('#cameraEditBtn').onclick=()=>setCamEdit(!camEditMode);$('#editCamera3DBtn').onclick=()=>{$$('.tab').forEach(x=>x.classList.remove('active'));$$('.view').forEach(x=>x.classList.remove('active'));$('.tab[data-tab="scene"]').classList.add('active');$('#scene').classList.add('active');setCamEdit(true);camPointSel={i:selKey,kind:'eye'};renderAll();toast('Camera Edit: tap eye/target then drag XYZ')};
+$('#prevKeyBtn').onclick=()=>{selKey=(selKey-1+scene.camera.keys.length)%scene.camera.keys.length;camPointSel={i:selKey,kind:'eye'};renderAll()};$('#nextKeyBtn').onclick=()=>{selKey=(selKey+1)%scene.camera.keys.length;camPointSel={i:selKey,kind:'eye'};renderAll()};
+function nudgeKeyTime(d){const k=scene.camera.keys[selKey];if(!k)return;pushHistory();k.t=Math.max(0,k.t+d);scene.camera.keys.sort((a,b)=>a.t-b.t);selKey=scene.camera.keys.indexOf(k);camPointSel.i=selKey;renderAll()}
+$('#keyMinusBtn').onclick=()=>nudgeKeyTime(-.25);$('#keyPlusBtn').onclick=()=>nudgeKeyTime(.25);
+$('#addKeyBtn').onclick=()=>{pushHistory();const last=scene.camera.keys.at(-1)||{t:0,eye:[0,2,-8],target:[0,1,0]},k=deep(last);k.t=last.t+2;k.eye[0]+=2;k.target[0]+=2;scene.camera.keys.push(k);selKey=scene.camera.keys.length-1;camPointSel={i:selKey,kind:'eye'};renderAll()};$('#deleteKeyBtn').onclick=()=>{if(scene.camera.keys.length<=1)return toast('Keep at least one keyframe');pushHistory();scene.camera.keys.splice(selKey,1);selKey=clamp(selKey,0,scene.camera.keys.length-1);camPointSel={i:selKey,kind:'eye'};renderAll()};
+$('#generateTrackBtn').onclick=()=>{pushHistory();scene.camera.keys=[{t:0,eye:[-8,2,-10],target:[-8,2,2]},{t:8,eye:[8,2,-10],target:[8,2,2]}];selKey=0;fitView();renderAll();toast('Generated 8s tracking path')};
+$('#generateOrbitBtn').onclick=()=>{pushHistory();const gf=geometryFaces(),pts=gf.flatMap(f=>f.v);let cx=0,cy=1.5,cz=3,r=10;if(pts.length){cx=pts.reduce((s,p)=>s+p[0],0)/pts.length;cy=pts.reduce((s,p)=>s+p[1],0)/pts.length;cz=pts.reduce((s,p)=>s+p[2],0)/pts.length;const rr=Math.max(...pts.map(p=>Math.hypot(p[0]-cx,p[2]-cz)));r=Math.max(8,rr*1.45+2)}const y=cy+Math.max(1.5,r*.12),n=6,ks=[];for(let i=0;i<=n;i++){const a=rad(-45+110*i/n);ks.push({t:8*i/n,eye:[cx+Math.sin(a)*r,y,cz+Math.cos(a)*r],target:[cx,cy,cz]})}scene.camera.keys=ks;selKey=0;fitView();renderAll();toast('Generated safe orbit path')};
+$('#generateTiltBtn').onclick=()=>{pushHistory();const eye=[0,2,-10],ks=[],n=5;for(let i=0;i<=n;i++){const p=rad(22*(1-i/n)),d=12;ks.push({t:8*i/n,eye:eye.slice(),target:[eye[0],eye[1]+Math.sin(p)*d,eye[2]+Math.cos(p)*d]})}scene.camera.keys=ks;selKey=0;renderAll();toast('Generated tilt-down path')};
+$('#interp').onchange=e=>{scene.camera.interpolation=e.target.value;updateJSON()};
+for(const id of ['sceneName','renderMode','viewport','visibility'])$('#'+id).onchange=updateJSON;
+$('#timeSlider').oninput=()=>drawPerspective();$('#prevStart').onclick=()=>{$('#timeSlider').value=0;drawPerspective()};$('#prevEnd').onclick=()=>{$('#timeSlider').value=1;drawPerspective()};$('#prevBack').onclick=()=>{$('#timeSlider').value=clamp(+$('#timeSlider').value-.05,0,1);drawPerspective()};$('#prevFwd').onclick=()=>{$('#timeSlider').value=clamp(+$('#timeSlider').value+.05,0,1);drawPerspective()};
+$('#playBtn').onclick=()=>{playing=!playing;$('#playBtn').textContent=playing?'⏸ Pause':'▶ Play';if(playing){playStart=performance.now()-(+$('#timeSlider').value)*duration()*1000;requestAnimationFrame(playLoop)}};function playLoop(now){if(!playing)return;let q=(now-playStart)/(duration()*1000);if(q>=1){q=1;playing=false;$('#playBtn').textContent='▶ Play'}$('#timeSlider').value=q;drawPerspective();if(playing)requestAnimationFrame(playLoop)}
+
+// v0.78 native bridge contract for future Android WebView shell.
+function androidBridge(){return window.GD3DAndroid||window.AndroidBridge||null}
+function nativeSaveText(filename,mime,text){const b=androidBridge();if(!b||typeof b.saveText!=='function')return false;try{b.saveText(filename,mime||'text/plain',text);return true}catch(e){return false}}
+function handleAndroidBack(){if($('#projectModal')?.classList.contains('show')){hideProjectModal();return true}if(camEditMode){setCamEdit(false);return true}return false}
+window.GD3DApp={version:'0.78',getSceneJSON:()=>JSON.stringify(cleanScene()),getProjectJSON:()=>JSON.stringify(projectSnapshot()),loadProjectJSON:(txt)=>{const p=JSON.parse(txt);applyProject(p,'Loaded from Android');return true},buildGmd:async()=>{const r=await buildGmd();return r&&r.ok?r.text:null},saveText:nativeSaveText,onAndroidBack:handleAndroidBack};
+
+let exportUrls={json:null,gmd:null,project:null};
+function showExportPanel(msg){
+  const st=$('#exportStatus');st.style.display='block';st.innerHTML=msg||'';
+  $$('.tab').forEach(x=>x.classList.remove('active'));$$('.view').forEach(x=>x.classList.remove('active'));
+  const tab=$('.tab[data-tab="preview"]');if(tab)tab.classList.add('active');$('#preview').classList.add('active');
+}
+function sceneFilename(){return (scene.name||'GD3D_Scene').replace(/[^A-Za-z0-9_-]+/g,'_')+'.scene.json'}
+function gmdFilename(){return (scene.name||'GD3D_Scene').replace(/[^A-Za-z0-9_-]+/g,'_')+'.gmd'}
+function setFileLink(kind,text,filename,mime){
+  if(exportUrls[kind])URL.revokeObjectURL(exportUrls[kind]);
+  const url=URL.createObjectURL(new Blob([text],{type:mime||'application/octet-stream'}));exportUrls[kind]=url;
+  const a=$('#'+kind+'Link');a.href=url;a.download=filename;a.dataset.filename=filename;a.dataset.mime=mime||'application/octet-stream';a.style.display='inline-block';
+  $('#saveLinks').style.display='block';return a;
+}
+async function copyText(text,label='Text'){
+  try{await navigator.clipboard.writeText(text);toast(label+' copied');return true}catch(e){}
+  try{const ta=$('#jsonOut');ta.focus();ta.select();document.execCommand('copy');toast(label+' copied');return true}catch(e){return false}
+}
+async function saveProject(){
+  updateJSON();const p=projectSnapshot();currentProjectId=p.project_id;p.saved_at=nowIso();const txt=JSON.stringify(p,null,2);const localOk=saveRecentProject(p);safeStoreSet(AUTOSAVE_KEY,txt);setFileLink('project',txt,projectFilename(),'application/json;charset=utf-8');projectDirty=false;updateProjectStatus(localOk?'Project saved':'Project file ready',localOk?'saved':'dirty');showExportPanel(`<strong>Project saved${localOk?' locally and':''} file ready.</strong><br>Tap <strong>Save Project File</strong> below for a portable backup.${localOk?'<br>Your project also appears under <strong>Recent</strong>.':'<br><span class="storageWarn">Local browser storage is unavailable, so keep the downloaded project file.</span>'}`);toast('Project saved');return p;
+}
+async function loadProjectFile(f){const p=JSON.parse(await f.text());if(p?.format===PROJECT_FORMAT||p?.scene){applyProject(p,'Project loaded');saveRecentProject(projectSnapshot());toast('Project loaded');return}if(p?.objects&&p?.camera){applyProject({format:PROJECT_FORMAT,version:PROJECT_VERSION,project_id:makeProjectId(),saved_at:nowIso(),scene:p},'Scene imported as project');toast('Scene imported');return}throw new Error('File is not a GD3D project or scene JSON')}
+async function prepareSceneJSON(){
+  updateJSON();const txt=syncJsonOut(true),filename=sceneFilename();setFileLink('json',txt,filename,'application/json;charset=utf-8');
+  showExportPanel('<strong>Scene JSON ready.</strong><br>Tap <strong>Save Scene JSON</strong> below. If your Android viewer does not download on a normal tap, long-press the link and choose <strong>Download link</strong> / <strong>Save link</strong>. The complete JSON also remains visible in the box below.');
+  toast('Scene JSON ready');return txt;
+}
+function qround(v,n=7){const p=10**n;return Math.round(v*p)/p}
+function xmlEsc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&apos;')}
+function objFields(o){let a=[];for(const [k,v] of Object.entries(o))a.push(k,String(v));return a.join(',')+';'}
+function key3(v){return v.map(x=>qround(x,8)).join('|')}
+function cameraBasis(k){const eye=v3(k.eye),F=norm(sub(v3(k.target),eye));let up=Math.abs(F[1])>.999?[0,0,1]:[0,1,0],R=norm(cross(F,up));if(Math.hypot(...R)<1e-8){up=Math.abs(F[2])<.9?[0,0,1]:[1,0,0];R=norm(cross(F,up))}const U=norm(cross(R,F));return {R,U,F}}
+function projectWorld(p,k,b){const d=sub(p,k.eye),z=dot(d,b.F);return {xy:[180+dot(d,b.R)/z*263.055,120+dot(d,b.U)/z*263.055],z}}
+function quickBuildGmd(skipUpdate=false){
+  if(!skipUpdate)updateJSON();const sc=cleanScene(),keys=sc.camera.keys;if(!keys||keys.length<1)return {ok:false,error:'Camera has no keyframes.'};
+  const bases=keys.map(cameraBasis),F=bases[0].F;
+  for(let i=1;i<bases.length;i++)if(dot(F,bases[i].F)<.9999995)return {ok:false,error:'Quick Build supports fixed camera orientation only. Orbit/tilt/general camera scenes still use the Python backend.'};
+  for(let i=0;i<keys.length-1;i++){const de=sub(keys[i+1].eye,keys[i].eye),forward=Math.abs(dot(de,F));if(forward>1e-5*Math.max(1,Math.hypot(...de)))return {ok:false,error:'Quick Build requires sideways/perpendicular tracking (no movement toward/away from the view direction). Use the Python backend for this camera path.'}}
+  let src=geometryFaces(),faces=[];
+  for(const f of src){
+    let polys=[];if(f.v.length<=4)polys=[f.v];else for(let i=1;i<f.v.length-1;i++)polys.push([f.v[0],f.v[i],f.v[i+1]]);
+    for(const vv of polys){
+      if(vv.length<3)continue;
+      const n=cross(sub(vv[1],vv[0]),sub(vv[2],vv[0])),d=dot(n,vv[0]),vals=keys.map(k=>dot(n,k.eye)-d),states=vals.map(x=>x>1e-9);
+      if(states.every(x=>!x))continue;
+      const events=[];
+      for(let seg=0;seg<keys.length-1;seg++){
+        const a=vals[seg],b=vals[seg+1],sa=a>1e-9,sb=b>1e-9;
+        if(sa!==sb&&Math.abs(b-a)>1e-12){const q=clamp(-a/(b-a),0,1),t=keys[seg].t+(keys[seg+1].t-keys[seg].t)*q;events.push({t,on:sb})}
+      }
+      faces.push({v:vv,color:hex6(f.color),vis0:states[0],visEvents:events})
+    }
+  }
+  if(!faces.length)return {ok:false,error:'No front-facing render faces for this camera.'};
+  if(faces.length>999)return {ok:false,error:`Quick Build needs ${faces.length} Gradients; Geometry Dash limit is 999.`};
+  for(const f of faces)for(const p of f.v)for(let i=0;i<keys.length;i++){const z=projectWorld(p,keys[i],bases[i]).z;if(z<=.15)return {ok:false,error:'Some visible geometry crosses the near plane. Quick Build refuses this case; use the Python backend.'}}
+  const mid=sampleCam((keys[0].t+keys[keys.length-1].t)/2),bm=cameraBasis(mid);
+  faces.sort((a,b)=>{const da=a.v.reduce((s,p)=>s+projectWorld(p,mid,bm).z,0)/a.v.length,db=b.v.reduce((s,p)=>s+projectWorld(p,mid,bm).z,0)/b.v.length;return db-da});
+  const verts=[],vmap=new Map(),ids=[];for(const f of faces){const row=[];for(const p of f.v){const k=key3(p);if(!vmap.has(k)){vmap.set(k,verts.length);verts.push(p)}row.push(vmap.get(k))}ids.push(row)}
+  const positions=keys.map((k,i)=>verts.map(p=>projectWorld(p,k,bases[i]).xy));
+  let nextGroup=1;const take=()=>nextGroup++,vg=verts.map(take),pg=faces.map(take),start=take(),objects=[];
+  for(let i=0;i<verts.length;i++){const xy=positions[0][i];objects.push({1:1,2:qround(xy[0]),3:qround(xy[1]),32:.001,21:1000,57:vg[i],96:1,121:1,135:1})}
+  const colors=[...new Set(faces.map(f=>f.color))];if(colors.length>999)return {ok:false,error:'Too many unique colors for GD channels.'};const channels={};colors.forEach((c,i)=>channels[c]=i+1);
+  for(let j=0;j<faces.length;j++){const vs=ids[j].map(i=>vg[i]),corners=vs.length===3?[vs[0],vs[1],vs[2],vs[2]]:[vs[0],vs[1],vs[3],vs[2]];objects.push({1:2903,2:1,3:qround(-1000-j*.025,6),21:channels[faces[j].color],22:channels[faces[j].color],24:7,25:j,202:8,203:corners[0],204:corners[1],205:corners[2],206:corners[3],207:1,209:j+1,57:pg[j]})}
+  objects.push({1:1268,2:1,3:300,51:start,63:.02});let moves=0,spawns=1,alphaSwitches=0;
+  const t0=keys[0].t;
+  // Sticky viewport visibility, but exact front/back transitions. No screen-edge culling.
+  for(let j=0;j<faces.length;j++)if(!faces[j].vis0)objects.push({1:1007,2:0,3:320,10:0,35:0,51:pg[j]});
+  const alphaEvents=new Map();for(let j=0;j<faces.length;j++)for(const e of faces[j].visEvents){const k=qround(e.t-t0,7);if(!alphaEvents.has(k))alphaEvents.set(k,[]);alphaEvents.get(k).push([j,e.on])}
+  for(const [delay,changes] of [...alphaEvents.entries()].sort((a,b)=>a[0]-b[0])){const stage=take();objects.push({1:1268,2:20,3:300,51:stage,63:delay,57:start,62:1,87:1});spawns++;for(const [j,on] of changes){objects.push({1:1007,2:40,3:320,10:0,35:on?1:0,51:pg[j],57:stage,62:1,87:1});alphaSwitches++}}
+  for(let seg=0;seg<keys.length-1;seg++){
+    const a=keys[seg],b=keys[seg+1],dt=b.t-a.t;if(dt<=0)return {ok:false,error:'Camera keyframe times must strictly increase.'};let group=start;
+    if(seg>0){group=take();objects.push({1:1268,2:2+seg,3:300,51:group,63:qround(a.t-t0,7),57:start,62:1,87:1});spawns++}
