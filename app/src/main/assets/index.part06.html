@@ -1,3 +1,10 @@
+// v0.80.2 patch bootstrap: let the stock editor initialize safely, then load
+// the exact BSP compiler + Android save overrides and refresh the preview.
+function previewBspSolution(){return null}
+window.addEventListener('load',()=>{
+  const queue=['bsp_core_v0802.js','bsp_compile_v0802.js','native_save_v0802.js'];
+  const next=()=>{if(!queue.length){try{scheduleBudget();drawPerspective()}catch(e){}return}const s=document.createElement('script');s.src=queue.shift();s.onload=next;s.onerror=next;document.head.appendChild(s)};next();
+});
 function transform(v,o){const R=rotMat(o.rotation),c=v3(o.center);return v.map(p=>[0,1,2].map(i=>c[i]+R[i][0]*p[0]+R[i][1]*p[1]+R[i][2]*p[2]))}
 function facesFor(o){let fs=[];if(o.type==='box'){const [sx,sy,sz]=(o.size||[1,1,1]).map(Number),x=sx/2,y=sy/2,z=sz/2,v=[[-x,-y,-z],[x,-y,-z],[x,y,-z],[-x,y,-z],[-x,-y,z],[x,-y,z],[x,y,z],[-x,y,z]],ids=[[0,3,2,1],[4,5,6,7],[0,4,7,3],[1,2,6,5],[0,1,5,4],[3,7,6,2]];fs=ids.map(a=>a.map(i=>v[i]))}else if(o.type==='plane'){const s=o.size||[1,1],a=s[0]/2,b=s[1]/2,ax=o.axis||'xz';let v=ax==='xz'?[[-a,0,-b],[-a,0,b],[a,0,b],[a,0,-b]]:ax==='xy'?[[-a,-b,0],[a,-b,0],[a,b,0],[-a,b,0]]:[[0,-a,-b],[0,a,-b],[0,a,b],[0,-a,b]];if(o.flip)v=v.reverse();fs=[v]}else if(o.type==='cylinder'){const n=Math.max(3,Math.round(o.sides||8)),r=+o.radius||.5,h=(+o.height||1)/2,bot=[],top=[];for(let i=0;i<n;i++){const a=2*Math.PI*i/n;bot.push([r*Math.cos(a),-h,r*Math.sin(a)]);top.push([r*Math.cos(a),h,r*Math.sin(a)])}for(let i=0;i<n;i++){let j=(i+1)%n;fs.push([bot[i],top[i],top[j],bot[j]])}if(o.caps!==false){fs.push([...top].reverse(),bot)}}return transform(fs.flat(),o).reduce((acc,p,idx)=>{ // re-split using original lengths below
  return acc
