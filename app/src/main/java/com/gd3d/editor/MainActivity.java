@@ -16,12 +16,16 @@ import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.Toast;
 
+import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.Locale;
 
 public class MainActivity extends Activity {
     private static final int REQ_SAVE_TEXT = 7001;
     private static final int REQ_FILE_CHOOSER = 7002;
+    private static final int EDITOR_PARTS = 9;
 
     private WebView webView;
     private ValueCallback<Uri[]> fileChooserCallback;
@@ -91,7 +95,33 @@ public class MainActivity extends Activity {
         webView.addJavascriptInterface(bridge, "GD3DAndroid");
         webView.addJavascriptInterface(bridge, "AndroidBridge");
 
-        webView.loadUrl("file:///android_asset/index.html");
+        loadBundledEditor();
+    }
+
+    private void loadBundledEditor() {
+        try {
+            StringBuilder html = new StringBuilder(128 * 1024);
+            byte[] buffer = new byte[8192];
+            for (int i = 1; i <= EDITOR_PARTS; i++) {
+                String name = String.format(Locale.US, "index.part%02d.html", i);
+                try (InputStream in = getAssets().open(name);
+                     ByteArrayOutputStream out = new ByteArrayOutputStream()) {
+                    int n;
+                    while ((n = in.read(buffer)) != -1) {
+                        out.write(buffer, 0, n);
+                    }
+                    html.append(out.toString(StandardCharsets.UTF_8.name()));
+                }
+            }
+            webView.loadDataWithBaseURL(
+                    "file:///android_asset/",
+                    html.toString(),
+                    "text/html",
+                    "UTF-8",
+                    null);
+        } catch (Exception e) {
+            Toast.makeText(this, "Unable to load GD3D editor: " + e.getMessage(), Toast.LENGTH_LONG).show();
+        }
     }
 
     private void enterImmersive() {
