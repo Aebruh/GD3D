@@ -4,16 +4,18 @@ import android.app.Activity;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
+import android.util.Log;
 import android.view.View;
 import android.view.Window;
-import android.view.WindowInsets;
-import android.view.WindowInsetsController;
+import android.view.WindowManager;
 import android.webkit.JavascriptInterface;
+import android.webkit.RenderProcessGoneDetail;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import java.io.ByteArrayOutputStream;
@@ -23,6 +25,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Locale;
 
 public class MainActivity extends Activity {
+    private static final String TAG = "GD3D";
     private static final int REQ_SAVE_TEXT = 7001;
     private static final int REQ_FILE_CHOOSER = 7002;
     private static final int EDITOR_PARTS = 9;
@@ -45,57 +48,81 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        requestWindowFeature(Window.FEATURE_NO_TITLE);
-        enterImmersive();
 
-        webView = new WebView(this);
-        setContentView(webView);
+        try {
+            requestWindowFeature(Window.FEATURE_NO_TITLE);
 
-        WebSettings s = webView.getSettings();
-        s.setJavaScriptEnabled(true);
-        s.setDomStorageEnabled(true);
-        s.setAllowFileAccess(true);
-        s.setAllowContentAccess(true);
-        s.setDatabaseEnabled(true);
-        s.setMediaPlaybackRequiresUserGesture(false);
-        s.setBuiltInZoomControls(false);
-        s.setDisplayZoomControls(false);
-        s.setSupportZoom(false);
-        s.setCacheMode(WebSettings.LOAD_DEFAULT);
+            // Deliberately use the legacy system-UI API here. It is deprecated on
+            // newer Android versions but remains available and avoids class-loading
+            // Android 11-only WindowInsetsController types on Android 8/9/10.
+            getWindow().setFlags(
+                    WindowManager.LayoutParams.FLAG_FULLSCREEN,
+                    WindowManager.LayoutParams.FLAG_FULLSCREEN);
 
-        webView.setWebViewClient(new WebViewClient());
-        webView.setWebChromeClient(new WebChromeClient() {
-            @Override
-            public boolean onShowFileChooser(WebView webView,
-                                             ValueCallback<Uri[]> filePathCallback,
-                                             FileChooserParams fileChooserParams) {
-                if (fileChooserCallback != null) fileChooserCallback.onReceiveValue(null);
-                fileChooserCallback = filePathCallback;
-                Intent intent;
-                try {
-                    intent = fileChooserParams.createIntent();
-                } catch (Exception e) {
-                    intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
-                    intent.addCategory(Intent.CATEGORY_OPENABLE);
-                    intent.setType("*/*");
-                }
-                try {
-                    startActivityForResult(intent, REQ_FILE_CHOOSER);
+            webView = new WebView(this);
+            setContentView(webView);
+            enterImmersive();
+
+            WebSettings s = webView.getSettings();
+            s.setJavaScriptEnabled(true);
+            s.setDomStorageEnabled(true);
+            s.setAllowFileAccess(true);
+            s.setAllowContentAccess(true);
+            s.setDatabaseEnabled(true);
+            s.setMediaPlaybackRequiresUserGesture(false);
+            s.setBuiltInZoomControls(false);
+            s.setDisplayZoomControls(false);
+            s.setSupportZoom(false);
+            s.setCacheMode(WebSettings.LOAD_DEFAULT);
+
+            webView.setWebViewClient(new WebViewClient() {
+                @Override
+                public boolean onRenderProcessGone(WebView view, RenderProcessGoneDetail detail) {
+                    Log.e(TAG, "WebView renderer exited. didCrash=" + detail.didCrash());
+                    runOnUiThread(() -> showStartupError(
+                            "Android System WebView stopped while GD3D was starting.\n\n" +
+                            "Try updating Chrome / Android System WebView, then reopen GD3D."));
                     return true;
-                } catch (Exception e) {
-                    fileChooserCallback.onReceiveValue(null);
-                    fileChooserCallback = null;
-                    Toast.makeText(MainActivity.this, "No file picker available", Toast.LENGTH_SHORT).show();
-                    return false;
                 }
-            }
-        });
+            });
 
-        AndroidBridge bridge = new AndroidBridge();
-        webView.addJavascriptInterface(bridge, "GD3DAndroid");
-        webView.addJavascriptInterface(bridge, "AndroidBridge");
+            webView.setWebChromeClient(new WebChromeClient() {
+                @Override
+                public boolean onShowFileChooser(WebView webView,
+                                                 ValueCallback<Uri[]> filePathCallback,
+                                                 FileChooserParams fileChooserParams) {
+                    if (fileChooserCallback != null) fileChooserCallback.onReceiveValue(null);
+                    fileChooserCallback = filePathCallback;
+                    Intent intent;
+                    try {
+                        intent = fileChooserParams.createIntent();
+                    } catch (Exception e) {
+                        intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+                        intent.addCategory(Intent.CATEGORY_OPENABLE);
+                        intent.setType("*/*");
+                    }
+                    try {
+                        startActivityForResult(intent, REQ_FILE_CHOOSER);
+                        return true;
+                    } catch (Exception e) {
+                        fileChooserCallback.onReceiveValue(null);
+                        fileChooserCallback = null;
+                        Toast.makeText(MainActivity.this, "No file picker available", Toast.LENGTH_SHORT).show();
+                        return false;
+                    }
+                }
+            });
 
-        loadBundledEditor();
+            AndroidBridge bridge = new AndroidBridge();
+            webView.addJavascriptInterface(bridge, "GD3DAndroid");
+            webView.addJavascriptInterface(bridge, "AndroidBridge");
+
+            loadBundledEditor();
+        } catch (Throwable t) {
+            Log.e(TAG, "Fatal startup error", t);
+            showStartupError("GD3D could not start.\n\n" + t.getClass().getSimpleName() +
+                    (t.getMessage() == null ? "" : ": " + t.getMessage()));
+        }
     }
 
     private void loadBundledEditor() {
@@ -119,33 +146,50 @@ public class MainActivity extends Activity {
                     "text/html",
                     "UTF-8",
                     null);
-        } catch (Exception e) {
-            Toast.makeText(this, "Unable to load GD3D editor: " + e.getMessage(), Toast.LENGTH_LONG).show();
+        } catch (Throwable t) {
+            Log.e(TAG, "Unable to load bundled editor", t);
+            showStartupError("GD3D editor assets could not be loaded.\n\n" +
+                    t.getClass().getSimpleName() +
+                    (t.getMessage() == null ? "" : ": " + t.getMessage()));
+        }
+    }
+
+    private void showStartupError(String message) {
+        try {
+            if (webView != null) {
+                try { webView.destroy(); } catch (Throwable ignored) {}
+                webView = null;
+            }
+            TextView errorView = new TextView(this);
+            errorView.setText(message + "\n\nBuild: GD3D 0.80.1 startup-fix");
+            errorView.setTextSize(16f);
+            errorView.setTextColor(0xFFFFFFFF);
+            errorView.setBackgroundColor(0xFF101217);
+            int pad = (int) (24 * getResources().getDisplayMetrics().density);
+            errorView.setPadding(pad, pad, pad, pad);
+            errorView.setTextIsSelectable(true);
+            setContentView(errorView);
+        } catch (Throwable ignored) {
+            // Nothing else is safe to do if even the fallback UI cannot be created.
         }
     }
 
     private void enterImmersive() {
-        if (android.os.Build.VERSION.SDK_INT >= 30) {
-            WindowInsetsController c = getWindow().getInsetsController();
-            if (c != null) {
-                c.hide(WindowInsets.Type.statusBars() | WindowInsets.Type.navigationBars());
-                c.setSystemBarsBehavior(WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
-            }
-        } else {
-            getWindow().getDecorView().setSystemUiVisibility(
-                    View.SYSTEM_UI_FLAG_FULLSCREEN |
-                    View.SYSTEM_UI_FLAG_HIDE_NAVIGATION |
-                    View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY |
-                    View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN |
-                    View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION |
-                    View.SYSTEM_UI_FLAG_LAYOUT_STABLE);
-        }
+        getWindow().getDecorView().setSystemUiVisibility(
+                View.SYSTEM_UI_FLAG_FULLSCREEN |
+                View.SYSTEM_UI_FLAG_HIDE_NAVIGATION |
+                View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY |
+                View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN |
+                View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION |
+                View.SYSTEM_UI_FLAG_LAYOUT_STABLE);
     }
 
     @Override
     public void onWindowFocusChanged(boolean hasFocus) {
         super.onWindowFocusChanged(hasFocus);
-        if (hasFocus) enterImmersive();
+        if (hasFocus) {
+            try { enterImmersive(); } catch (Throwable ignored) {}
+        }
     }
 
     public class AndroidBridge {
@@ -156,7 +200,7 @@ public class MainActivity extends Activity {
 
         @JavascriptInterface
         public String appVersion() {
-            return "0.80-alpha";
+            return "0.80.1-alpha";
         }
 
         @JavascriptInterface
