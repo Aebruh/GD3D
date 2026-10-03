@@ -1,0 +1,77 @@
+function hideProjectModal(){$('#projectModal').classList.remove('show')}
+function fmtSaved(s){try{return new Date(s).toLocaleString()}catch(e){return s||''}}
+function refreshRecoverButton(){const p=readAutosave(),b=$('#recoverBtn');if(b)b.style.display=p?'inline-block':'none'}
+function showRecentProjects(){
+  const a=recentProjects();let html='';if(!storageAvailable)html+='<div class="storageWarn">Browser local storage is unavailable. Downloadable project files still work, but autosave/recent projects cannot persist.</div>';
+  if(!a.length)html+='<div class="hint">No saved projects yet. Use <strong>Save Project</strong> to create one.</div>';
+  a.forEach((p,i)=>{const sc=p.scene||{},obj=(sc.objects||[]).length,keys=sc.camera?.keys?.length||0;html+=`<div class="recentItem"><strong>${String(sc.name||'Untitled').replace(/[<&]/g,'')}</strong><div class="recentMeta">${fmtSaved(p.saved_at)} • ${obj} objects • ${keys} camera keys</div><div class="recentActions"><button data-open-recent="${i}" class="primary">Open</button><button data-download-recent="${i}">Download</button><button data-delete-recent="${i}" class="danger">Delete</button></div></div>`});
+  showProjectModal('Recent Projects',html);$$('[data-open-recent]').forEach(b=>b.onclick=()=>{const p=recentProjects()[+b.dataset.openRecent];if(p){applyProject(p,'Loaded recent project');hideProjectModal();toast('Project loaded')}});$$('[data-download-recent]').forEach(b=>b.onclick=()=>{const p=recentProjects()[+b.dataset.downloadRecent];if(!p)return;currentProjectId=p.project_id||currentProjectId;setFileLink('project',JSON.stringify(p,null,2),(p.scene?.name||'GD3D_Project').replace(/[^A-Za-z0-9_-]+/g,'_')+'.gd3dproj.json','application/json;charset=utf-8');hideProjectModal();showExportPanel('<strong>Project file ready.</strong><br>Tap <strong>Save Project File</strong>.')});$$('[data-delete-recent]').forEach(b=>b.onclick=()=>{let a=recentProjects();a.splice(+b.dataset.deleteRecent,1);safeStoreSet(RECENTS_KEY,JSON.stringify(a));showRecentProjects()})
+}
+function promptAutosaveRecovery(){const p=readAutosave();if(!p)return;const sc=p.scene||{};showProjectModal('Recover Autosave?',`<div class="recoverBox"><strong>${String(sc.name||'Untitled').replace(/[<&]/g,'')}</strong><div class="recentMeta">Autosaved ${fmtSaved(p.saved_at)} • ${(sc.objects||[]).length} objects</div></div><p class="hint">Recover the last browser autosave, or keep the fresh demo scene. The autosave remains available from the Recover button until replaced.</p><div class="toolbar"><button id="recoverNow" class="primary">Recover Autosave</button><button id="skipRecover">Keep Fresh Scene</button></div>`);$('#recoverNow').onclick=()=>{applyProject(p,'Recovered autosave');hideProjectModal();toast('Autosave recovered')};$('#skipRecover').onclick=()=>hideProjectModal()}
+
+
+function toast(msg){const e=$('#toast');e.textContent=msg;e.classList.add('show');setTimeout(()=>e.classList.remove('show'),1400)}
+function editorSnapshot(){return JSON.stringify({scene,sel:[...selObjs],active:selObj,key:selKey})}
+function pushHistory(){const snap=editorSnapshot();undoStack.push(snap);while(undoStack.length>historyLimit||undoStack.reduce((n,x)=>n+(typeof x==='string'?x.length:JSON.stringify(x).length),0)>historyByteLimit)undoStack.shift();redoStack.length=0;updateUndoButtons()}
+function restoreSnapshot(snap){if(typeof snap==='string')snap=JSON.parse(snap);scene=normalizeScene(snap.scene);selObjs=new Set((snap.sel||[]).filter(i=>i>=0&&i<scene.objects.length));selObj=(snap.active>=0&&snap.active<scene.objects.length)?snap.active:(selObjs.size?[...selObjs][0]:-1);selKey=clamp(snap.key||0,0,Math.max(0,scene.camera.keys.length-1));camPointSel={i:selKey,kind:camPointSel?.kind||'eye'};renderAll();updateUndoButtons()}
+function doUndo(){if(!undoStack.length)return toast('Nothing to undo');redoStack.push(editorSnapshot());restoreSnapshot(undoStack.pop());toast('Undo')}
+function doRedo(){if(!redoStack.length)return toast('Nothing to redo');undoStack.push(editorSnapshot());restoreSnapshot(redoStack.pop());toast('Redo')}
+function updateUndoButtons(){if($('#undoBtn'))$('#undoBtn').disabled=!undoStack.length;if($('#redoBtn'))$('#redoBtn').disabled=!redoStack.length}
+function selectedIndices(){if(selObjs.size)return [...selObjs].filter(i=>i>=0&&i<scene.objects.length).sort((a,b)=>a-b);return selObj>=0?[selObj]:[]}
+function syncActiveSelection(){if(selObj>=0&&scene.objects[selObj]&&!selObjs.has(selObj)&&!multiSelectMode)selObjs=new Set([selObj]);if(selObj<0&&selObjs.size)selObj=[...selObjs][0]}
+function groupMembers(i){const o=scene.objects[i],g=o&&o.editor_group;if(!g)return [i];const a=[];scene.objects.forEach((q,j)=>{if(q.editor_group===g)a.push(j)});return a}
+function selectObject(i,add=false){if(i<0||!scene.objects[i])return;const members=groupMembers(i);if(add){const all=members.every(j=>selObjs.has(j));members.forEach(j=>all?selObjs.delete(j):selObjs.add(j));if(selObjs.size)selObj=selObjs.has(i)?i:[...selObjs][0];else selObj=-1}else{selObjs=new Set(members);selObj=i}renderAll()}
+function selectionPivot(){const ids=selectedIndices();if(!ids.length)return null;const p=[0,0,0];ids.forEach(i=>{const c=v3(scene.objects[i].center);for(let a=0;a<3;a++)p[a]+=c[a]/ids.length});return p}
+function reindexSelectionAfterDelete(deleted){const ds=[...deleted].sort((a,b)=>a-b);const map=i=>i-ds.filter(d=>d<i).length;const next=[];for(const i of selObjs)if(!deleted.has(i))next.push(map(i));selObjs=new Set(next);selObj=next.length?next[0]:Math.min(scene.objects.length-1,Math.max(-1,map(selObj)))}
+function groupSelection(){const ids=selectedIndices();if(ids.length<2)return toast('Select 2+ objects');pushHistory();const gid='g'+(groupCounter++);ids.forEach(i=>scene.objects[i].editor_group=gid);renderAll();toast(`Grouped ${ids.length} objects`)}
+function ungroupSelection(){const ids=selectedIndices();if(!ids.length)return;const gs=new Set(ids.map(i=>scene.objects[i].editor_group).filter(Boolean));if(!gs.size)return toast('Selection is not grouped');pushHistory();scene.objects.forEach(o=>{if(gs.has(o.editor_group))delete o.editor_group});renderAll();toast('Ungrouped')}
+
+function v3(a,d=[0,0,0]){return Array.isArray(a)&&a.length===3?a.map(Number):d.slice()}
+function normalizeScene(s){
+  s=deep(s||{}); s.name=s.name||'GD3D_Visual_Scene'; s.objects=Array.isArray(s.objects)?s.objects:[]; s.render=Object.assign({mode:'auto',viewport:'21:9',visibility:'dynamic'},s.render||{});
+  const c=s.camera||{}; if(!Array.isArray(c.keys)){ // convert simple preset to two approximate keys when possible
+    if(c.eye_start&&c.eye_end){const d=v3(c.look_direction,[0,0,1]);c.keys=[{t:0,eye:v3(c.eye_start),target:v3(c.target_start,v3(c.eye_start).map((x,i)=>x+d[i]))},{t:Number(c.duration||8),eye:v3(c.eye_end),target:v3(c.target_end,v3(c.eye_end).map((x,i)=>x+d[i]))}]}
+    else c.keys=[{t:0,eye:[-6,2,-10],target:[0,1.5,2]},{t:6,eye:[6,2,-10],target:[0,1.5,2]}];
+  }
+  c.interpolation=c.interpolation||'linear'; c.keys.sort((a,b)=>a.t-b.t); s.camera=c;
+  s.objects=s.objects.map((o,i)=>Object.assign({type:'box',name:`object_${i}`,center:[0,.5,0],color:'999999'},o));
+  const gids=s.objects.map(o=>String(o.editor_group||'')).map(x=>/^g(\d+)$/.exec(x)).filter(Boolean).map(m=>+m[1]);if(gids.length)groupCounter=Math.max(groupCounter,Math.max(...gids)+1);
+  return s;
+}
+function defaultScene(){return normalizeScene({name:'GD3D_Visual_Room',objects:[
+ {type:'plane',name:'floor',axis:'xz',center:[0,0,3],size:[16,18],color:'454A52'},
+ {type:'plane',name:'backwall',axis:'xy',center:[0,4,12],size:[16,8],flip:true,color:'B6B9BE'},
+ {type:'box',name:'sofa',center:[-2,.75,5],size:[4.2,1.5,1.7],color:'2F6387'},
+ {type:'box',name:'table',center:[2,.55,5.5],size:[2.4,1.1,1.4],color:'8A4E28'}],camera:{interpolation:'linear',keys:[{t:0,eye:[-5,2,-12],target:[-5,2,2]},{t:8,eye:[3,2,-12],target:[3,2,2]}]},render:{mode:'auto',viewport:'21:9',visibility:'dynamic'}})}
+scene=defaultScene();
+
+function duration(){const k=scene.camera.keys;return k.length?Math.max(0.01,k[k.length-1].t):1}
+function sampleCam(t){const k=scene.camera.keys;if(k.length===1)return deep(k[0]);if(t<=k[0].t)return deep(k[0]);if(t>=k[k.length-1].t)return deep(k[k.length-1]);let i=0;while(i<k.length-1&&k[i+1].t<t)i++;const a=k[i],b=k[i+1],q=(t-a.t)/(b.t-a.t||1),mix=(x,y)=>x+(y-x)*q;return {t,eye:a.eye.map((x,j)=>mix(x,b.eye[j])),target:a.target.map((x,j)=>mix(x,b.target[j]))}}
+function toCanvas(x,z,cv){return [cv.width/2+(x-topView.cx)*topView.scale,cv.height/2-(z-topView.cz)*topView.scale]}
+function fromCanvas(px,py,cv){return [(px-cv.width/2)/topView.scale+topView.cx,(cv.height/2-py)/topView.scale+topView.cz]}
+function drawGrid(ctx,cv){ctx.clearRect(0,0,cv.width,cv.height);ctx.fillStyle='#0b0e13';ctx.fillRect(0,0,cv.width,cv.height);const s=topView.scale;const step=s<12?5:s<30?2:1;ctx.lineWidth=1;for(let x=Math.floor(topView.cx-cv.width/2/s)-2;x<topView.cx+cv.width/2/s+2;x+=step){const p=toCanvas(x,0,cv)[0];ctx.strokeStyle=x===0?'#486078':'#202733';ctx.beginPath();ctx.moveTo(p,0);ctx.lineTo(p,cv.height);ctx.stroke()}for(let z=Math.floor(topView.cz-cv.height/2/s)-2;z<topView.cz+cv.height/2/s+2;z+=step){const p=toCanvas(0,z,cv)[1];ctx.strokeStyle=z===0?'#486078':'#202733';ctx.beginPath();ctx.moveTo(0,p);ctx.lineTo(cv.width,p);ctx.stroke()}}
+function objectFootprint(o){const c=v3(o.center),ry=rad(v3(o.rotation)[1]);let sx=1,sz=1;if(o.type==='box'){const s=o.size||[1,1,1];sx=+s[0];sz=+s[2]}else if(o.type==='plane'){const s=o.size||[1,1],a=o.axis||'xz';if(a==='xz'){sx=+s[0];sz=+s[1]}else if(a==='xy'){sx=+s[0];sz=.15}else {sx=.15;sz=+s[1]}}else if(o.type==='cylinder'){sx=sz=2*(+o.radius||.5)};return {x:c[0],z:c[2],sx,sz,ry}}
+function drawObjects(ctx,cv){scene.objects.forEach((o,i)=>{const f=objectFootprint(o),[x,z]=toCanvas(f.x,f.z,cv);ctx.save();ctx.translate(x,z);ctx.rotate(-f.ry);ctx.fillStyle='#'+hex6(o.color)+'cc';ctx.strokeStyle=i===selObj?'#ffffff':'#91a1b5';ctx.lineWidth=i===selObj?3:1;if(o.type==='cylinder'){ctx.beginPath();ctx.arc(0,0,Math.max(4,f.sx*topView.scale/2),0,Math.PI*2);ctx.fill();ctx.stroke()}else{ctx.beginPath();ctx.rect(-f.sx*topView.scale/2,-f.sz*topView.scale/2,f.sx*topView.scale,f.sz*topView.scale);ctx.fill();ctx.stroke()}ctx.restore();if(i===selObj){ctx.fillStyle='#fff';ctx.font='12px system-ui';ctx.fillText(o.name||o.type,x+8,z-8)}})}
+function drawCamera(ctx,cv,keys=true){const arr=scene.camera.keys;arr.forEach((k,i)=>{if(!keys&&i!==selKey)return;const [ex,ez]=toCanvas(k.eye[0],k.eye[2],cv),[tx,tz]=toCanvas(k.target[0],k.target[2],cv);ctx.strokeStyle=i===selKey?'#66e6ff':'#426f87';ctx.lineWidth=i===selKey?3:1.5;ctx.beginPath();ctx.moveTo(ex,ez);ctx.lineTo(tx,tz);ctx.stroke();ctx.fillStyle=i===selKey?'#66e6ff':'#5f95aa';ctx.beginPath();ctx.arc(ex,ez,i===selKey?7:5,0,Math.PI*2);ctx.fill();ctx.strokeStyle=ctx.fillStyle;ctx.beginPath();ctx.moveTo(tx-5,tz-5);ctx.lineTo(tx+5,tz+5);ctx.moveTo(tx+5,tz-5);ctx.lineTo(tx-5,tz+5);ctx.stroke();ctx.fillStyle='#dbe8f5';ctx.font='11px system-ui';ctx.fillText(`${i}  ${k.t.toFixed(1)}s`,ex+8,ez-7)})}
+
+// ---------- v0.71 interactive 3D editor viewport + XYZ move gizmo ----------
+function editorCamera(){
+ const cp=Math.cos(editorView.pitch),sp=Math.sin(editorView.pitch),sy=Math.sin(editorView.yaw),cy=Math.cos(editorView.yaw),d=editorView.distance,t=editorView.target;
+ const eye=[t[0]+sy*cp*d,t[1]+sp*d,t[2]+cy*cp*d],F=norm(sub(t,eye)),up=Math.abs(F[1])>.985?[0,0,1]:[0,1,0],R=norm(cross(F,up)),U=cross(R,F);
+ return {eye,F,R,U};
+}
+function editorProject(p,cv){const c=editorCamera(),q=sub(p,c.eye),z=dot(q,c.F);if(z<=.04)return null;const focal=(cv.height*.5)/Math.tan(rad(editorView.fov)*.5);return [cv.width/2+dot(q,c.R)/z*focal,cv.height/2-dot(q,c.U)/z*focal,z]}
+function editorRay(px,py,cv){const c=editorCamera(),f=(cv.height*.5)/Math.tan(rad(editorView.fov)*.5),x=(px-cv.width/2)/f,y=-(py-cv.height/2)/f;return {o:c.eye,d:norm([c.F[0]+c.R[0]*x+c.U[0]*y,c.F[1]+c.R[1]*x+c.U[1]*y,c.F[2]+c.R[2]*x+c.U[2]*y])}}
+function rayPlaneY(px,py,cv,y){const r=editorRay(px,py,cv),den=r.d[1];if(Math.abs(den)<1e-5)return null;const t=(y-r.o[1])/den;if(t<0)return null;return [r.o[0]+r.d[0]*t,y,r.o[2]+r.d[2]*t]}
+function shadeHex(hex,k){hex=hex6(hex);const n=parseInt(hex,16),r=(n>>16)&255,g=(n>>8)&255,b=n&255;const q=x=>clamp(Math.round(x*k),0,255).toString(16).padStart(2,'0');return '#'+q(r)+q(g)+q(b)}
+function editorDrawGrid(ctx,cv){
+ const c=editorCamera(),extent=Math.max(20,Math.min(100,editorView.distance*2.4)),step=editorView.distance>45?10:editorView.distance>22?5:editorView.distance>10?2:1;
+ ctx.lineWidth=1;
+ for(let x=Math.floor((editorView.target[0]-extent)/step)*step;x<=editorView.target[0]+extent;x+=step){const a=editorProject([x,0,editorView.target[2]-extent],cv),b=editorProject([x,0,editorView.target[2]+extent],cv);if(!a||!b)continue;ctx.strokeStyle=Math.abs(x)<1e-6?'#3a6f9b':'#202a35';ctx.beginPath();ctx.moveTo(a[0],a[1]);ctx.lineTo(b[0],b[1]);ctx.stroke()}
+ for(let z=Math.floor((editorView.target[2]-extent)/step)*step;z<=editorView.target[2]+extent;z+=step){const a=editorProject([editorView.target[0]-extent,0,z],cv),b=editorProject([editorView.target[0]+extent,0,z],cv);if(!a||!b)continue;ctx.strokeStyle=Math.abs(z)<1e-6?'#3a6f9b':'#202a35';ctx.beginPath();ctx.moveTo(a[0],a[1]);ctx.lineTo(b[0],b[1]);ctx.stroke()}
+}
+function editorObjectCenter(o){return v3(o.center)}
+function renderScene3D(){
+ const __rt0=performance.now();
+ const cv=$('#topCanvas'),ctx=cv.getContext('2d');ctx.clearRect(0,0,cv.width,cv.height);ctx.fillStyle='#0a0e14';ctx.fillRect(0,0,cv.width,cv.height);editorDrawGrid(ctx,cv);
+ const cam=editorCamera(),draw=[];
