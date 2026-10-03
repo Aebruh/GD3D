@@ -1,0 +1,146 @@
+    for(let i=0;i<verts.length;i++){const dx=positions[seg+1][i][0]-positions[seg][i][0],dy=positions[seg+1][i][1]-positions[seg][i][1];if(Math.abs(dx)+Math.abs(dy)<1e-10)continue;objects.push({1:901,2:900,3:-2300,10:qround(dt,7),28:qround(dx),29:qround(dy),51:vg[i],57:group,62:1,87:1});moves++}
+  }
+  if(nextGroup>10000)return {ok:false,error:`GD group budget exceeded (${nextGroup-1}/9999).`};
+  let parts=[];for(const c of colors){const ch=channels[c],rgb=[parseInt(c.slice(0,2),16),parseInt(c.slice(2,4),16),parseInt(c.slice(4,6),16)];parts.push(`1_${rgb[0]}_2_${rgb[1]}_3_${rgb[2]}_4_-1_6_${ch}_7_1_15_1.0_18_0_8_1`)}parts.push('1_0_2_0_3_0_4_-1_6_1000_7_0.0_15_0.0_18_0_8_1');
+  const header='kS38,'+parts.join('|')+',kA13,0,kA6,1,kA16,1,kA15,1,k128,0,kA8,1,kA10,1,kA22,1',level=header+';'+objects.map(objFields).join(''),desc='GD3D Visual Editor Quick Build; fixed-orientation perpendicular tracking; sticky visibility.';
+  const xml='<?xml version="1.0"?><plist version="1.0" gjver="2.0"><dict><k>kCEK</k><i>4</i><k>k2</k><s>'+xmlEsc(sc.name)+'</s><k>k4</k><s>'+xmlEsc(level)+'</s><k>k5</k><s>'+xmlEsc(desc)+'</s><k>k13</k><t/><k>k21</k><i>2</i><k>k16</k><i>1</i><k>k80</k><i>7</i><k>k50</k><i>45</i><k>k47</k><t/><k>k48</k><i>'+objects.length+'</i></dict></plist>';
+  return {ok:true,text:xml,report:{gradients:faces.length,anchors:verts.length,move_triggers:moves,alpha_switches:alphaSwitches,spawn_triggers:spawns,objects:objects.length,groups:nextGroup-1,camera_keys:keys.length}};
+}
+
+function sampleCamFromKeys(keys,t){
+  if(keys.length===1)return deep(keys[0]);
+  if(t<=keys[0].t)return deep(keys[0]);
+  if(t>=keys[keys.length-1].t)return deep(keys[keys.length-1]);
+  let i=0;while(i<keys.length-1&&keys[i+1].t<t)i++;
+  const a=keys[i],b=keys[i+1],q=(t-a.t)/(b.t-a.t||1),mix=(x,y)=>x+(y-x)*q;
+  return {t,eye:a.eye.map((x,j)=>mix(x,b.eye[j])),target:a.target.map((x,j)=>mix(x,b.target[j]))};
+}
+function generalFaces(){
+  const src=geometryFaces(),out=[];
+  for(const f of src){
+    if(!f.v||f.v.length<3)continue;
+    const polys=f.v.length<=4?[f.v]:Array.from({length:f.v.length-2},(_,i)=>[f.v[0],f.v[i+1],f.v[i+2]]);
+    for(const vv of polys){
+      if(vv.length<3||vv.length>4)continue;
+      const n=cross(sub(vv[1],vv[0]),sub(vv[2],vv[0]));
+      if(Math.hypot(...n)<1e-10)continue;
+      out.push({v:vv,color:hex6(f.color),n,d:dot(n,vv[0])});
+    }
+  }
+  return out;
+}
+function generalAdaptiveSchedule(keys,verts,tolerance=1.0,maxKnots=72){
+  const cache=new Map();
+  const sample=t=>{
+    const kk=qround(t,10);if(cache.has(kk))return cache.get(kk);
+    const cam=sampleCamFromKeys(keys,t),basis=cameraBasis(cam),pos=[];let minz=Infinity;
+    for(const p of verts){const pr=projectWorld(p,cam,basis);pos.push(pr.xy);minz=Math.min(minz,pr.z)}
+    const v={t,cam,basis,pos,minz};cache.set(kk,v);return v;
+  };
+  const times=[...new Set(keys.map(k=>+k.t))].sort((a,b)=>a-b),stack=[];
+  for(let i=0;i<times.length-1;i++)stack.push([times[i],times[i+1]]);
+  while(stack.length){
+    const [a,b]=stack.pop();if(b-a<1e-4)continue;
+    const A=sample(a),B=sample(b);if(A.minz<=.16||B.minz<=.16)return {ok:false,nearPlane:true,error:'Some scene geometry crosses the near plane.'};let worst=0;
+    for(const q of [.25,.5,.75]){
+      const t=a+(b-a)*q,M=sample(t);if(M.minz<=.16)return {ok:false,nearPlane:true,error:'Some scene geometry crosses the near plane.'};
+      for(let i=0;i<verts.length;i++){
+        const px=A.pos[i][0]*(1-q)+B.pos[i][0]*q,py=A.pos[i][1]*(1-q)+B.pos[i][1]*q;
+        worst=Math.max(worst,Math.hypot(px-M.pos[i][0],py-M.pos[i][1]));
+      }
+    }
+    if(worst>tolerance){
+      if(times.length>=maxKnots)return {ok:false,error:`General camera needs more than ${maxKnots} motion knots at ${tolerance.toFixed(2)} GD-unit tolerance. Simplify the camera path or use the Python backend.`};
+      const m=(a+b)/2;times.push(m);times.sort((x,y)=>x-y);stack.push([a,m],[m,b]);
+    }
+  }
+  return {ok:true,times,sample};
+}
+
+// v0.76 close-camera browser renderer ---------------------------------------
+const CLIP_NEAR=.15,CLIP_FOCAL=263.055;
+function camPoint(p,cam,b){const d=sub(p,cam.eye);return [dot(d,b.R),dot(d,b.U),dot(d,b.F)]}
+function clipHalf(poly,fn){if(!poly.length)return poly;const out=[];let A=poly[poly.length-1],fa=fn(A),ina=fa>=-1e-9;for(const B of poly){const fb=fn(B),inb=fb>=-1e-9;if(ina!==inb){const den=fa-fb,q=Math.abs(den)<1e-12?.5:fa/den;out.push([A[0]+(B[0]-A[0])*q,A[1]+(B[1]-A[1])*q,A[2]+(B[2]-A[2])*q])}if(inb)out.push(B);A=B;fa=fb;ina=inb}return out}
+function clipCamPoly(poly){
+  // Guard band is intentionally much larger than the visible 21:9 viewport,
+  // so topology changes caused by screen-edge clipping occur off-screen.
+  const xmin=-420,xmax=780,ymin=-320,ymax=560,f=CLIP_FOCAL,cx=180,cy=120;
+  const L=(xmin-cx)/f,R=(xmax-cx)/f,B=(ymin-cy)/f,T=(ymax-cy)/f;
+  let p=clipHalf(poly,q=>q[2]-CLIP_NEAR);
+  p=clipHalf(p,q=>q[0]-L*q[2]);p=clipHalf(p,q=>R*q[2]-q[0]);
+  p=clipHalf(p,q=>q[1]-B*q[2]);p=clipHalf(p,q=>T*q[2]-q[1]);
+  return p;
+}
+function projCam(q){return [180+q[0]/q[2]*CLIP_FOCAL,120+q[1]/q[2]*CLIP_FOCAL]}
+function clippedGeneralTriangles(){
+  const fs=generalFaces(),out=[];
+  for(const f of fs){
+    if(f.v.length===3)out.push({v:f.v,color:f.color,n:f.n,d:f.d});
+    else if(f.v.length===4){
+      const a=[f.v[0],f.v[1],f.v[2]],b=[f.v[0],f.v[2],f.v[3]];
+      for(const vv of [a,b]){const n=cross(sub(vv[1],vv[0]),sub(vv[2],vv[0]));out.push({v:vv,color:f.color,n,d:dot(n,vv[0])})}
+    }
+  }
+  return out;
+}
+function clipSampleTriangle(tri,cam,basis){
+  if(dot(tri.n,cam.eye)-tri.d<=1e-9)return [];
+  const cp=tri.v.map(p=>camPoint(p,cam,basis)),poly=clipCamPoly(cp);if(poly.length<3)return [];
+  const pts=poly.map(projCam),pieces=[];
+  for(let i=1;i<poly.length-1;i++){
+    const xyz=[poly[0],poly[i],poly[i+1]],xy=[pts[0],pts[i],pts[i+1]],depth=(xyz[0][2]+xyz[1][2]+xyz[2][2])/3;
+    const area=(xy[1][0]-xy[0][0])*(xy[2][1]-xy[0][1])-(xy[1][1]-xy[0][1])*(xy[2][0]-xy[0][0]);
+    if(Math.abs(area)>1e-5)pieces.push({xy,depth});
+  }
+  return pieces;
+}
+function nearClipAdaptiveSchedule(keys,tris,tolerance=1.25,maxKnots=180){
+  const cache=new Map();
+  const sample=t=>{const kk=qround(t,10);if(cache.has(kk))return cache.get(kk);const cam=sampleCamFromKeys(keys,t),basis=cameraBasis(cam),pieces=new Map();let sig=[];
+    for(let fi=0;fi<tris.length;fi++){const ps=clipSampleTriangle(tris[fi],cam,basis);if(ps.length)sig.push(fi+':'+ps.length);for(let pi=0;pi<ps.length;pi++)pieces.set(fi+':'+pi,ps[pi]);}
+    const v={t,cam,basis,pieces,topology:sig.join('|')};cache.set(kk,v);return v};
+  const times=[...new Set(keys.map(k=>+k.t))].sort((a,b)=>a-b),stack=[];for(let i=0;i<times.length-1;i++)stack.push([times[i],times[i+1]]);
+  while(stack.length){const [a,b]=stack.pop();if(b-a<1/120)continue;const A=sample(a),B=sample(b),checks=[[.25,sample(a+(b-a)*.25)],[.5,sample((a+b)/2)],[.75,sample(a+(b-a)*.75)]];let split=A.topology!==B.topology,worst=0;
+    for(const [q,M] of checks){if(M.topology!==A.topology||M.topology!==B.topology){split=true;break}for(const [k,p] of A.pieces){const r=B.pieces.get(k),m=M.pieces.get(k);if(!r||!m){split=true;break}for(let j=0;j<3;j++){const px=p.xy[j][0]*(1-q)+r.xy[j][0]*q,py=p.xy[j][1]*(1-q)+r.xy[j][1]*q;worst=Math.max(worst,Math.hypot(px-m.xy[j][0],py-m.xy[j][1]))}if(split)break}if(split)break}
+    if(split||worst>tolerance){if(times.length>=maxKnots)return {ok:false,error:`Close-camera path needs more than ${maxKnots} motion knots. Slow/simplify the camera or reduce close geometry.`};const m=(a+b)/2;if(!times.some(x=>Math.abs(x-m)<1e-9)){times.push(m);times.sort((x,y)=>x-y)}stack.push([a,m],[m,b])}
+  }
+  return {ok:true,times,sample};
+}
+function statePieceAt(sample,key){return sample.pieces.get(key)||null}
+function stateEdgeSample(sched,state,t,side){
+  const eps=Math.min(1e-4,Math.max(1e-7,(state.t1-state.t0)*1e-5));let tt=t;if(side>0&&Math.abs(t-state.t0)<1e-10)tt=Math.min(state.t1-eps,t+eps);if(side<0&&Math.abs(t-state.t1)<1e-10)tt=Math.max(state.t0+eps,t-eps);return sched.sample(tt)
+}
+function generalBuildGmdClipped(skipUpdate=false){
+  if(!skipUpdate)updateJSON();const sc=cleanScene(),keys=sc.camera.keys;if(!keys||keys.length<2)return {ok:false,error:'Close-camera build needs at least two camera keyframes.'};
+  for(let i=0;i<keys.length-1;i++)if(!(keys[i+1].t>keys[i].t))return {ok:false,error:'Camera keyframe times must strictly increase.'};
+  const tris=clippedGeneralTriangles();if(!tris.length)return {ok:false,error:'No renderable triangles in the scene.'};
+  const sched=nearClipAdaptiveSchedule(keys,tris,1.35,220);if(!sched.ok)return sched;const {times,sample}=sched,states=[];
+  for(let i=0;i<times.length-1;i++){const a=times[i],b=times[i+1],m=(a+b)/2,S=sample(m),vis=[];for(const [key,p] of S.pieces)vis.push([key,p.depth]);vis.sort((x,y)=>y[1]-x[1]);const order=vis.map(x=>x[0]),sig=order.join(',');const prev=states.at(-1);if(prev&&prev.sig===sig){prev.t1=b;prev.endIndex=i+1}else states.push({t0:a,t1:b,startIndex:i,endIndex:i+1,order,sig})}
+  if(!states.length||!states.some(s=>s.order.length))return {ok:false,error:'No visible clipped faces along this camera path.'};
+  const placementCount=states.reduce((n,s)=>n+s.order.length,0);if(placementCount>999)return {ok:false,error:`Close-camera build needs ${placementCount} Gradient placements; Geometry Dash limit is 999. Reduce close geometry or camera complexity.`};
+  const colors=[...new Set(tris.map(f=>f.color))];if(colors.length>999)return {ok:false,error:'Too many unique colors for GD channels.'};const channels={};colors.forEach((c,i)=>channels[c]=i+1);
+  let nextGroup=1;const take=()=>nextGroup++,start=take(),placements=[],objects=[];let gradId=1;
+  // Each clipped placement owns three stable anchors. This is intentionally more expensive
+  // than the normal shared-vertex path, but only activates for near-plane scenes.
+  for(let si=0;si<states.length;si++){
+    const st=states[si],pg=[];const S0=stateEdgeSample(sched,st,st.t0,1);
+    for(let rank=0;rank<st.order.length;rank++){
+      const key=st.order[rank],piece=statePieceAt(S0,key)||statePieceAt(sample((st.t0+st.t1)/2),key);if(!piece)continue;const fi=+key.split(':')[0],tri=tris[fi],ag=[take(),take(),take()],g=take();
+      for(let j=0;j<3;j++)objects.push({1:1,2:qround(piece.xy[j][0]),3:qround(piece.xy[j][1]),32:.001,21:1000,57:ag[j],96:1,121:1,135:1});
+      const slot=placements.length;placements.push({group:g,state:si,key,anchors:ag});pg.push(slot);objects.push({1:2903,2:1,3:qround(-1000-slot*.025,6),21:channels[tri.color],22:channels[tri.color],24:7,25:rank,202:8,203:ag[0],204:ag[1],205:ag[2],206:ag[2],207:1,209:gradId++,57:g});
+    }st.placements=pg;
+  }
+  const initially=new Set(states[0].placements);for(let i=0;i<placements.length;i++)objects.push({1:1007,2:0,3:320,10:0,35:initially.has(i)?1:0,51:placements[i].group});
+  objects.push({1:1268,2:1,3:300,51:start,63:.02});let spawns=1,alphaSwitches=0,moves=0;const t0=times[0];
+  for(let si=1;si<states.length;si++){const stage=take(),delay=qround(states[si].t0-t0,7);objects.push({1:1268,2:20+si,3:300,51:stage,63:delay,57:start,62:1,87:1});spawns++;for(const slot of states[si-1].placements){objects.push({1:1007,2:40,3:320,10:0,35:0,51:placements[slot].group,57:stage,62:1,87:1});alphaSwitches++}for(const slot of states[si].placements){objects.push({1:1007,2:41,3:320,10:0,35:1,51:placements[slot].group,57:stage,62:1,87:1});alphaSwitches++}}
+  // Move each state's private clipped anchors only while that state is active.
+  const stageBySeg=new Map();const getStage=seg=>{if(stageBySeg.has(seg))return stageBySeg.get(seg);const g=take(),a=times[seg];objects.push({1:1268,2:900+seg,3:-2200,51:g,63:qround(a-t0,7),57:start,62:1,87:1});spawns++;stageBySeg.set(seg,g);return g};
+  for(let si=0;si<states.length;si++){const st=states[si];for(const slot of st.placements){const pl=placements[slot];for(let seg=st.startIndex;seg<st.endIndex;seg++){const a=times[seg],b=times[seg+1],A=stateEdgeSample(sched,st,a,1),B=stateEdgeSample(sched,st,b,-1),pa=statePieceAt(A,pl.key),pb=statePieceAt(B,pl.key);if(!pa||!pb)continue;const stage=getStage(seg),dt=b-a;for(let j=0;j<3;j++){const dx=pb.xy[j][0]-pa.xy[j][0],dy=pb.xy[j][1]-pa.xy[j][1];if(Math.abs(dx)+Math.abs(dy)<1e-10)continue;objects.push({1:901,2:900+j,3:-2300,10:qround(dt,7),28:qround(dx),29:qround(dy),51:pl.anchors[j],57:stage,62:1,87:1});moves++}}}}
+  if(nextGroup>10000)return {ok:false,error:`GD group budget exceeded (${nextGroup-1}/9999).`};if(objects.length>90000)return {ok:false,error:`Close-camera build would create about ${objects.length.toLocaleString()} objects; browser safety cap is 90,000.`};
+  let parts=[];for(const c of colors){const ch=channels[c],rgb=[parseInt(c.slice(0,2),16),parseInt(c.slice(2,4),16),parseInt(c.slice(4,6),16)];parts.push(`1_${rgb[0]}_2_${rgb[1]}_3_${rgb[2]}_4_-1_6_${ch}_7_1_15_1.0_18_0_8_1`)}parts.push('1_0_2_0_3_0_4_-1_6_1000_7_0.0_15_0.0_18_0_8_1');
+  const header='kS38,'+parts.join('|')+',kA13,0,kA6,1,kA16,1,kA15,1,k128,0,kA8,1,kA10,1,kA22,1',level=header+';'+objects.map(objFields).join(''),desc='GD3D Visual Editor v0.76 Close Camera; near-plane + guard-frustum clipped triangles; adaptive motion.';
+  const xml='<?xml version="1.0"?><plist version="1.0" gjver="2.0"><dict><k>kCEK</k><i>4</i><k>k2</k><s>'+xmlEsc(sc.name)+'</s><k>k4</k><s>'+xmlEsc(level)+'</s><k>k5</k><s>'+xmlEsc(desc)+'</s><k>k13</k><t/><k>k21</k><i>2</i><k>k16</k><i>1</i><k>k80</k><i>7</i><k>k50</k><i>45</i><k>k47</k><t/><k>k48</k><i>'+objects.length+'</i></dict></plist>';
+  return {ok:true,text:xml,report:{mode:'close_camera',source_faces:tris.length,gradients:placementCount,anchors:placements.length*3,move_triggers:moves,alpha_switches:alphaSwitches,spawn_triggers:spawns,objects:objects.length,groups:nextGroup-1,motion_knots:times.length,depth_states:states.length,tolerance:1.35}};
+}
+
+function generalBuildGmd(skipUpdate=false){
