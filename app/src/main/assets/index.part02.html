@@ -1,0 +1,87 @@
+  -webkit-text-stroke:0!important;
+  text-shadow:none!important;
+  letter-spacing:0!important;
+}
+/* Compact numeric controls benefit from a slightly smaller GD-style face. */
+input,select{font-size:.95em}
+
+/* v0.78 performance / APK prep */
+.perfHud{position:absolute;right:8px;bottom:8px;background:#111820dd;border:2px solid #536473;border-radius:7px;padding:5px 7px;font-size:9px;line-height:1.35;color:#d8e3ea;pointer-events:none;box-shadow:0 2px 0 #0008}
+.preflightBox{border:2px solid #52616d;background:#171e24;border-radius:8px;padding:8px;margin:8px 0;font-size:11px;line-height:1.45}.preflightBox.ok{border-color:#398654}.preflightBox.warn{border-color:#ae8235}.preflightBox.bad{border-color:#a94747}.preflightBox .pfTitle{font-size:12px;margin-bottom:3px}.preflightBox ul{margin:4px 0 0 18px;padding:0}.preflightBox li{margin:2px 0}
+@media(max-width:700px){.perfHud{right:5px;bottom:5px;font-size:8px;padding:4px 5px}.preflightBox{font-size:9px;padding:6px}}
+</style>
+</head>
+<body>
+<div id="top"><div class="brand">GD3D EDITOR <span class="pill">v0.78</span></div><span id="projectStatus" class="projectStatus">Autosave ready</span><button id="undoBtn">↶ Undo</button><button id="redoBtn">↷ Redo</button><button id="newBtn">New</button><button id="saveProjectBtn" class="primary">Save Project</button><button id="loadProjectBtn">Load Project</button><button id="recentBtn">Recent</button><button id="recoverBtn" style="display:none">Recover</button><button id="importBtn">Import Scene</button><button id="exportBtn">Export Scene</button><input id="projectInput" type="file" accept=".gd3dproj.json,.json,application/json" hidden><input id="fileInput" type="file" accept=".json,.scene.json,application/json" hidden></div>
+<div id="tabs"><button class="tab active" data-tab="scene">BUILD</button><button class="tab" data-tab="camera">CAMERA</button><button class="tab" data-tab="preview">PLAY / EXPORT</button></div>
+
+<section id="scene" class="view active">
+<div class="grid2">
+<div class="card"><div class="toolbar"><button data-add="box">+ Box</button><button data-add="plane">+ Plane</button><button data-add="cylinder">+ Cylinder</button><button id="duplicateBtn">Duplicate</button><button id="deleteBtn" class="danger">Delete</button><button id="multiBtn">Multi</button><button id="groupBtn">Group</button><button id="ungroupBtn">Ungroup</button><span id="selCount" class="multiCount"></span><button id="fitBtn">Frame All</button><button id="cameraEditBtn">Camera Edit</button><span style="width:6px"></span><button id="modeMove" class="primary">Move</button><button id="modeRotate">Rotate</button><button id="modeScale">Scale</button><span style="width:6px"></span><label id="moveSnapWrap" style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--muted)">Move snap <select id="moveSnap"><option value="0">Off</option><option value="0.1">0.1</option><option value="0.25">0.25</option><option value="0.5">0.5</option><option value="1">1</option></select></label><label id="rotSnapWrap" style="display:none;align-items:center;gap:5px;font-size:12px;color:var(--muted)">Rotate snap <select id="rotSnap"><option value="0">Off</option><option value="5">5°</option><option value="15" selected>15°</option><option value="30">30°</option><option value="45">45°</option></select></label><label id="scaleSnapWrap" style="display:none;align-items:center;gap:5px;font-size:12px;color:var(--muted)">Scale snap <select id="scaleSnap"><option value="0">Off</option><option value="0.05">0.05</option><option value="0.1" selected>0.1</option><option value="0.25">0.25</option><option value="0.5">0.5</option></select></label><span style="width:6px"></span><button id="viewPerspBtn">3D</button><button id="viewTopBtn">Top</button><button id="viewFrontBtn">Front</button><button id="viewSideBtn">Side</button></div><div class="canvasWrap"><canvas id="topCanvas" width="1000" height="620"></canvas><div class="badge" id="sceneBadge">3D viewport — XYZ gizmos • Multi-select / Groups • empty drag orbit • pinch/wheel zoom • 2-finger pan</div><div id="budgetHud" class="budgetHud">Budget: calculating…</div><div id="perfHud" class="perfHud">Perf: ready</div></div></div>
+<div class="card"><h3>OBJECTS</h3><div id="objList" class="objlist"></div><div class="sep"></div><div id="objEditor"><div class="hint">Select an object.</div></div></div>
+</div>
+</section>
+
+<section id="camera" class="view">
+<div class="grid2">
+<div class="card"><h3>CAMERA PATH</h3><div class="toolbar"><button id="prevKeyBtn">◀ Key</button><button id="nextKeyBtn">Key ▶</button><button id="addKeyBtn">+ Keyframe</button><button id="deleteKeyBtn" class="danger">Delete Key</button><button id="keyMinusBtn">−0.25s</button><button id="keyPlusBtn">+0.25s</button><button id="editCamera3DBtn" class="primary">Edit in 3D</button><button id="generateTrackBtn">Generate Track</button><button id="generateOrbitBtn">Generate Orbit</button><button id="generateTiltBtn">Generate Tilt</button></div><div class="canvasWrap"><canvas id="camCanvas" width="1000" height="620"></canvas><div class="badge">Top view — drag eye ● and target ×</div></div></div>
+<div class="card"><h3>KEYFRAMES</h3><div id="keyList" class="keylist"></div><div class="sep"></div><div id="keyEditor"></div><div class="sep"></div><div class="row"><label>Interpolation</label><select id="interp"><option value="linear">linear</option></select></div></div>
+</div>
+</section>
+
+<section id="preview" class="view">
+<div class="grid2">
+<div class="card"><div class="toolbar"><button id="prevStart">|◀</button><button id="prevBack">◀</button><button id="playBtn" class="primary">▶ Play</button><button id="prevFwd">▶</button><button id="prevEnd">▶|</button><span id="timeLabel" class="tiny"></span></div><canvas id="previewCanvas" width="1120" height="480"></canvas><input id="timeSlider" type="range" min="0" max="1" step="0.001" value="0" style="width:100%;margin-top:8px"></div>
+<div class="card"><h3>LEVEL / RENDER</h3><div class="row"><label>Name</label><input id="sceneName"></div><div class="row"><label>Renderer</label><select id="renderMode"><option value="auto">auto</option><option value="exact">exact</option><option value="side_scroll_fast">side_scroll_fast</option></select></div><div class="row"><label>Viewport</label><select id="viewport"><option>21:9</option><option>20:9</option><option>22:9</option><option>16:9</option></select></div><div class="row"><label>Visibility</label><select id="visibility"><option value="dynamic">dynamic</option><option value="sticky">sticky</option></select></div><div class="sep"></div><div id="stats" class="status"></div><div id="preflightBox" class="preflightBox">Preflight: waiting for budget…</div><div class="sep"></div><div class="toolbar"><button id="copyBtn">Copy JSON</button><button id="downloadBtn">Prepare .scene.json</button><button id="buildGmdBtn" class="primary">Build .gmd</button></div><div id="exportStatus" class="status" style="display:none;margin-bottom:8px"></div><div id="saveLinks" style="display:none;margin:6px 0 10px"><a id="projectLink" class="downloadLink secondary" style="display:none">Save Project File</a><a id="jsonLink" class="downloadLink secondary">Save Scene JSON</a><a id="gmdLink" class="downloadLink">Save .gmd</a></div><textarea id="jsonOut" spellcheck="false"></textarea><p class="hint"><strong>v0.78:</strong> performance / APK-preparation pass. Viewport redraws, live budgets, JSON serialization, history memory, and autosave are throttled for larger scenes. The compiler now runs a preflight report before export and exposes a native Android bridge contract for the future APK shell. Renderer behavior remains v0.76-compatible.</p></div>
+</div>
+</section>
+<div id="toast"></div><div id="projectModal" class="modalBack"><div class="modalCard"><div class="modalHead"><strong id="projectModalTitle">Projects</strong><button id="closeProjectModal">Close</button></div><div id="projectModalBody"></div></div></div>
+<script>
+'use strict';
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const rad=d=>d*Math.PI/180;
+const hex6=s=>{s=(s||'999999').replace('#','').trim();if(s.length===3)s=s.split('').map(c=>c+c).join('');return /^[0-9a-f]{6}$/i.test(s)?s.toUpperCase():'999999'};
+const deep=o=>JSON.parse(JSON.stringify(o));
+let scene={name:'GD3D_Visual_Scene',objects:[],camera:{interpolation:'linear',keys:[{t:0,eye:[-6,2,-10],target:[0,1.5,2]},{t:6,eye:[6,2,-10],target:[0,1.5,2]}]},render:{mode:'auto',viewport:'21:9',visibility:'dynamic'}};
+let selObj=-1, selObjs=new Set(), selKey=0, topView={cx:0,cz:2,scale:24}, drag=null, playing=false, playStart=0;
+let editorView={target:[0,1.5,3],yaw:rad(-35),pitch:rad(24),distance:22,fov:55};
+let editPointers=new Map(), editAction=null, editGesture=null, transformMode='move', multiSelectMode=false, camEditMode=false, camPointSel={i:0,kind:'eye'};
+let undoStack=[],redoStack=[],historyLimit=40,historyByteLimit=12*1024*1024,groupCounter=1;
+let liveBudget=null,budgetTimer=null,budgetBusy=false,budgetRevision=0;
+let jsonDirty=true,render3DQueued=false,perf={renderMs:0,budgetMs:0,lastBuildMs:0,lastObjects:0,lastFaces:0};
+// ---------- v0.76 project persistence (carried forward) ----------
+const PROJECT_FORMAT='GD3D_PROJECT',PROJECT_VERSION='0.78',AUTOSAVE_KEY='GD3D_v075_AUTOSAVE',RECENTS_KEY='GD3D_v075_RECENTS';
+let currentProjectId=null,projectDirty=false,autosaveTimer=null,suppressAutosave=false,storageAvailable=true,lastAutosaveAt=0;
+function nowIso(){return new Date().toISOString()}
+function makeProjectId(){try{return crypto.randomUUID()}catch(e){return 'p'+Date.now().toString(36)+Math.random().toString(36).slice(2,8)}}
+function safeStoreGet(k){try{return localStorage.getItem(k)}catch(e){storageAvailable=false;return null}}
+function safeStoreSet(k,v){try{localStorage.setItem(k,v);storageAvailable=true;return true}catch(e){storageAvailable=false;return false}}
+function safeStoreRemove(k){try{localStorage.removeItem(k);return true}catch(e){storageAvailable=false;return false}}
+function projectFilename(){return (scene.name||'GD3D_Project').replace(/[^A-Za-z0-9_-]+/g,'_')+'.gd3dproj.json'}
+function projectSnapshot(){
+  return {format:PROJECT_FORMAT,version:PROJECT_VERSION,project_id:currentProjectId||makeProjectId(),saved_at:nowIso(),scene:cleanScene(),editor:{view:deep(editorView),topView:deep(topView),transformMode,multiSelectMode,camEditMode,camPointSel:deep(camPointSel),selected:selectedIndices(),active:selObj,key:selKey,snaps:{move:$('#moveSnap')?.value||'0',rotate:$('#rotSnap')?.value||'15',scale:$('#scaleSnap')?.value||'0.1'}}};
+}
+function updateProjectStatus(text,cls=''){
+  const el=$('#projectStatus');if(!el)return;el.className='projectStatus'+(cls?' '+cls:'');el.textContent=text;
+}
+function markProjectDirty(){if(suppressAutosave)return;projectDirty=true;updateProjectStatus('Unsaved changes','dirty');scheduleAutosave()}
+function scheduleAutosave(){if(suppressAutosave)return;clearTimeout(autosaveTimer);const n=scene.objects.length;autosaveTimer=setTimeout(writeAutosave,n>400?2600:n>150?1800:1100)}
+function writeAutosave(){
+  if(suppressAutosave)return;const p=projectSnapshot();currentProjectId=p.project_id;const raw=JSON.stringify(p);if(raw.length>4.2*1024*1024){updateProjectStatus('Project too large for browser autosave — use Save Project','dirty');return false}const ok=safeStoreSet(AUTOSAVE_KEY,raw);lastAutosaveAt=Date.now();if(ok)updateProjectStatus('Autosaved '+new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}),projectDirty?'dirty':'saved');else updateProjectStatus('Autosave unavailable — use Save Project','dirty');refreshRecoverButton();return ok;
+}
+function readAutosave(){const raw=safeStoreGet(AUTOSAVE_KEY);if(!raw)return null;try{const p=JSON.parse(raw);return p&&p.scene?p:null}catch(e){return null}}
+function recentProjects(){const raw=safeStoreGet(RECENTS_KEY);if(!raw)return [];try{const a=JSON.parse(raw);return Array.isArray(a)?a:[]}catch(e){return []}}
+function saveRecentProject(p){
+  let a=recentProjects().filter(x=>x&&x.project_id!==p.project_id);a.unshift(p);a=a.slice(0,6);let raw=JSON.stringify(a);while(a.length>1&&raw.length>3.5*1024*1024){a.pop();raw=JSON.stringify(a)}while(a.length&&!safeStoreSet(RECENTS_KEY,raw)){a.pop();raw=JSON.stringify(a)}return storageAvailable;
+}
+function clearHistoryForProject(){undoStack.length=0;redoStack.length=0;updateUndoButtons()}
+function applyProject(p,label='Project loaded'){
+  if(!p||!p.scene)throw new Error('Not a GD3D project file');suppressAutosave=true;scene=normalizeScene(p.scene);currentProjectId=p.project_id||makeProjectId();const ed=p.editor||{};
+  if(ed.view)editorView=Object.assign(editorView,deep(ed.view));if(ed.topView)topView=Object.assign(topView,deep(ed.topView));
+  transformMode=(['move','rotate','scale'].includes(ed.transformMode)?ed.transformMode:'move');multiSelectMode=!!ed.multiSelectMode;camEditMode=!!ed.camEditMode;selObjs=new Set((ed.selected||[]).filter(i=>i>=0&&i<scene.objects.length));selObj=(Number.isInteger(ed.active)&&ed.active>=0&&ed.active<scene.objects.length)?ed.active:(selObjs.size?[...selObjs][0]:(scene.objects.length?0:-1));selKey=clamp(+ed.key||0,0,Math.max(0,scene.camera.keys.length-1));camPointSel=ed.camPointSel||{i:selKey,kind:'eye'};
+  renderAll();setTransformMode(transformMode);$('#multiBtn')?.classList.toggle('primary',multiSelectMode);setCamEdit(camEditMode);
+  if(ed.snaps){if($('#moveSnap'))$('#moveSnap').value=ed.snaps.move??'0';if($('#rotSnap'))$('#rotSnap').value=ed.snaps.rotate??'15';if($('#scaleSnap'))$('#scaleSnap').value=ed.snaps.scale??'0.1'}
+  clearHistoryForProject();projectDirty=false;suppressAutosave=false;updateProjectStatus(label,'saved');scheduleAutosave();
+}
+function showProjectModal(title,html){$('#projectModalTitle').textContent=title;$('#projectModalBody').innerHTML=html;$('#projectModal').classList.add('show')}
