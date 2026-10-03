@@ -10,8 +10,8 @@ android {
         applicationId 'com.gd3d.editor'
         minSdk 26
         targetSdk 35
-        versionCode 81
-        versionName '0.80.1-alpha'
+        versionCode 82
+        versionName '0.80.2-alpha'
     }
 
     buildTypes {
