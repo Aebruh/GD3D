@@ -15,5 +15,9 @@ function setFileLink(kind,text,filename,mime){
   $('#saveLinks').style.display='block';return a;
 }
 
-// v0.80.4 UI-only patch: compact bars + full-screen BUILD viewport.
-(()=>{const s=document.createElement('script');s.src='ui_focus_v0804.js';document.head.appendChild(s)})();
+// UI-only mobile patches load after the stock editor and native-save bridge.
+(()=>{
+  const s=document.createElement('script');s.src='ui_focus_v0804.js';
+  s.onload=()=>{const t=document.createElement('script');t.src='mobile_tools_v0805.js';document.head.appendChild(t)};
+  document.head.appendChild(s);
+})();
