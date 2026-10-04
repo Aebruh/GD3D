@@ -15,14 +15,15 @@ function setFileLink(kind,text,filename,mime){
   $('#saveLinks').style.display='block';return a;
 }
 
-// v0.81 base renderer loads first. v0.81.1 then overrides only the Exact
-// compiler's Gradient runtime stacking behavior. Mobile UI layers load last.
+// v0.81 base renderer loads first. v0.81.2 then replaces the failed v0.81.1
+// Alpha-based Gradient lifetime logic with native Gradient Disable-All rebuilds.
+// Mobile UI layers load last.
 (()=>{
   const r=document.createElement('script');r.src='renderer_v081.js';
   r.onload=()=>{
-    const rr=document.createElement('script');rr.src='renderer_v0811.js';
+    const rr=document.createElement('script');rr.src='renderer_v0812.js';
     rr.onload=()=>loadMobile();
-    rr.onerror=()=>{try{toast('v0.81.1 stack fix failed to load; using v0.81 renderer')}catch(e){}loadMobile()};
+    rr.onerror=()=>{try{toast('v0.81.2 renderer failed to load; using v0.81 renderer')}catch(e){}loadMobile()};
     document.head.appendChild(rr);
   };
   r.onerror=()=>{try{toast('v0.81 renderer patch failed to load; using v0.80 renderer')}catch(e){}loadMobile()};
