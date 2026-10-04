@@ -15,17 +15,22 @@ function setFileLink(kind,text,filename,mime){
   $('#saveLinks').style.display='block';return a;
 }
 
-// UI-only mobile patches load after the stock editor and native-save bridge.
+// v0.81 renderer override loads first, then the mobile UI-only layers.
 (()=>{
-  const s=document.createElement('script');s.src='ui_focus_v0804.js';
-  s.onload=()=>{
-    const t=document.createElement('script');t.src='mobile_tools_v0805.js';
-    t.onload=()=>{
-      const u=document.createElement('script');u.src='camera_tools_v0806.js';
-      u.onload=()=>{const v=document.createElement('script');v.src='build_tools_v0807.js';document.head.appendChild(v)};
-      document.head.appendChild(u);
+  const r=document.createElement('script');r.src='renderer_v081.js';
+  r.onload=()=>{
+    const s=document.createElement('script');s.src='ui_focus_v0804.js';
+    s.onload=()=>{
+      const t=document.createElement('script');t.src='mobile_tools_v0805.js';
+      t.onload=()=>{
+        const u=document.createElement('script');u.src='camera_tools_v0806.js';
+        u.onload=()=>{const v=document.createElement('script');v.src='build_tools_v0807.js';document.head.appendChild(v)};
+        document.head.appendChild(u);
+      };
+      document.head.appendChild(t);
     };
-    document.head.appendChild(t);
+    document.head.appendChild(s);
   };
-  document.head.appendChild(s);
+  r.onerror=()=>{try{toast('v0.81 renderer patch failed to load; using v0.80 renderer')}catch(e){}};
+  document.head.appendChild(r);
 })();
