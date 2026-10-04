@@ -15,10 +15,20 @@ function setFileLink(kind,text,filename,mime){
   $('#saveLinks').style.display='block';return a;
 }
 
-// v0.81 renderer override loads first, then the mobile UI-only layers.
+// v0.81 base renderer loads first. v0.81.1 then overrides only the Exact
+// compiler's Gradient runtime stacking behavior. Mobile UI layers load last.
 (()=>{
   const r=document.createElement('script');r.src='renderer_v081.js';
   r.onload=()=>{
+    const rr=document.createElement('script');rr.src='renderer_v0811.js';
+    rr.onload=()=>loadMobile();
+    rr.onerror=()=>{try{toast('v0.81.1 stack fix failed to load; using v0.81 renderer')}catch(e){}loadMobile()};
+    document.head.appendChild(rr);
+  };
+  r.onerror=()=>{try{toast('v0.81 renderer patch failed to load; using v0.80 renderer')}catch(e){}loadMobile()};
+  document.head.appendChild(r);
+
+  function loadMobile(){
     const s=document.createElement('script');s.src='ui_focus_v0804.js';
     s.onload=()=>{
       const t=document.createElement('script');t.src='mobile_tools_v0805.js';
@@ -30,7 +40,5 @@ function setFileLink(kind,text,filename,mime){
       document.head.appendChild(t);
     };
     document.head.appendChild(s);
-  };
-  r.onerror=()=>{try{toast('v0.81 renderer patch failed to load; using v0.80 renderer')}catch(e){}};
-  document.head.appendChild(r);
+  }
 })();
