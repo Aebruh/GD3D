@@ -51,10 +51,6 @@ public class MainActivity extends Activity {
 
         try {
             requestWindowFeature(Window.FEATURE_NO_TITLE);
-
-            // Deliberately use the legacy system-UI API here. It is deprecated on
-            // newer Android versions but remains available and avoids class-loading
-            // Android 11-only WindowInsetsController types on Android 8/9/10.
             getWindow().setFlags(
                     WindowManager.LayoutParams.FLAG_FULLSCREEN,
                     WindowManager.LayoutParams.FLAG_FULLSCREEN);
@@ -116,7 +112,6 @@ public class MainActivity extends Activity {
             AndroidBridge bridge = new AndroidBridge();
             webView.addJavascriptInterface(bridge, "GD3DAndroid");
             webView.addJavascriptInterface(bridge, "AndroidBridge");
-
             loadBundledEditor();
         } catch (Throwable t) {
             Log.e(TAG, "Fatal startup error", t);
@@ -134,9 +129,7 @@ public class MainActivity extends Activity {
                 try (InputStream in = getAssets().open(name);
                      ByteArrayOutputStream out = new ByteArrayOutputStream()) {
                     int n;
-                    while ((n = in.read(buffer)) != -1) {
-                        out.write(buffer, 0, n);
-                    }
+                    while ((n = in.read(buffer)) != -1) out.write(buffer, 0, n);
                     html.append(out.toString(StandardCharsets.UTF_8.name()));
                 }
             }
@@ -161,7 +154,7 @@ public class MainActivity extends Activity {
                 webView = null;
             }
             TextView errorView = new TextView(this);
-            errorView.setText(message + "\n\nBuild: GD3D 0.80.6-alpha");
+            errorView.setText(message + "\n\nBuild: GD3D 0.81.0-alpha");
             errorView.setTextSize(16f);
             errorView.setTextColor(0xFFFFFFFF);
             errorView.setBackgroundColor(0xFF101217);
@@ -169,9 +162,7 @@ public class MainActivity extends Activity {
             errorView.setPadding(pad, pad, pad, pad);
             errorView.setTextIsSelectable(true);
             setContentView(errorView);
-        } catch (Throwable ignored) {
-            // Nothing else is safe to do if even the fallback UI cannot be created.
-        }
+        } catch (Throwable ignored) {}
     }
 
     private void enterImmersive() {
@@ -200,7 +191,7 @@ public class MainActivity extends Activity {
 
         @JavascriptInterface
         public String appVersion() {
-            return "0.80.6-alpha";
+            return "0.81.0-alpha";
         }
 
         @JavascriptInterface
@@ -230,7 +221,6 @@ public class MainActivity extends Activity {
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
-
         if (requestCode == REQ_FILE_CHOOSER) {
             if (fileChooserCallback != null) {
                 Uri[] result = WebChromeClient.FileChooserParams.parseResult(resultCode, data);
@@ -239,7 +229,6 @@ public class MainActivity extends Activity {
             }
             return;
         }
-
         if (requestCode == REQ_SAVE_TEXT) {
             PendingSave save = pendingSave;
             pendingSave = null;
@@ -250,14 +239,10 @@ public class MainActivity extends Activity {
                 os.write(save.text.getBytes(StandardCharsets.UTF_8));
                 os.flush();
                 Toast.makeText(this, "Saved " + save.filename, Toast.LENGTH_SHORT).show();
-                if (webView != null) {
-                    webView.evaluateJavascript("window.dispatchEvent(new CustomEvent('gd3d-native-save-complete',{detail:{ok:true}}));", null);
-                }
+                if (webView != null) webView.evaluateJavascript("window.dispatchEvent(new CustomEvent('gd3d-native-save-complete',{detail:{ok:true}}));", null);
             } catch (Exception e) {
                 Toast.makeText(this, "Save failed: " + e.getMessage(), Toast.LENGTH_LONG).show();
-                if (webView != null) {
-                    webView.evaluateJavascript("window.dispatchEvent(new CustomEvent('gd3d-native-save-complete',{detail:{ok:false}}));", null);
-                }
+                if (webView != null) webView.evaluateJavascript("window.dispatchEvent(new CustomEvent('gd3d-native-save-complete',{detail:{ok:false}}));", null);
             }
         }
     }
