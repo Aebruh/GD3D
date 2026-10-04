@@ -20,7 +20,11 @@ function setFileLink(kind,text,filename,mime){
   const s=document.createElement('script');s.src='ui_focus_v0804.js';
   s.onload=()=>{
     const t=document.createElement('script');t.src='mobile_tools_v0805.js';
-    t.onload=()=>{const u=document.createElement('script');u.src='camera_tools_v0806.js';document.head.appendChild(u)};
+    t.onload=()=>{
+      const u=document.createElement('script');u.src='camera_tools_v0806.js';
+      u.onload=()=>{const v=document.createElement('script');v.src='build_tools_v0807.js';document.head.appendChild(v)};
+      document.head.appendChild(u);
+    };
     document.head.appendChild(t);
   };
   document.head.appendChild(s);
