@@ -15,15 +15,16 @@ function setFileLink(kind,text,filename,mime){
   $('#saveLinks').style.display='block';return a;
 }
 
-// v0.81 base renderer loads first. v0.81.3 then replaces the reusable/nested
-// Gradient activation model with direct per-state Gradient trigger redraws.
+// v0.81 base renderer loads first. v0.81.4 then synchronizes every exact BSP
+// depth-state boundary with a projection-motion knot so Geometry Dash reaches
+// the crossing pose on the same frame that the Gradient order changes.
 // Mobile UI layers load last.
 (()=>{
   const r=document.createElement('script');r.src='renderer_v081.js';
   r.onload=()=>{
-    const rr=document.createElement('script');rr.src='renderer_v0813.js';
+    const rr=document.createElement('script');rr.src='renderer_v0814.js';
     rr.onload=()=>loadMobile();
-    rr.onerror=()=>{try{toast('v0.81.3 renderer failed to load; using v0.81 renderer')}catch(e){}loadMobile()};
+    rr.onerror=()=>{try{toast('v0.81.4 renderer failed to load; using v0.81 renderer')}catch(e){}loadMobile()};
     document.head.appendChild(rr);
   };
   r.onerror=()=>{try{toast('v0.81 renderer patch failed to load; using v0.80 renderer')}catch(e){}loadMobile()};
