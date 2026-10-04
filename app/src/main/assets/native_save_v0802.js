@@ -15,15 +15,21 @@ function setFileLink(kind,text,filename,mime){
   $('#saveLinks').style.display='block';return a;
 }
 
-// v0.81 base renderer loads first. v0.81.4 then synchronizes every exact BSP
-// depth-state boundary with a projection-motion knot so Geometry Dash reaches
-// the crossing pose on the same frame that the Gradient order changes.
+// v0.81 base renderer loads first. v0.81.4 synchronizes exact BSP state
+// boundaries with projection-motion knots. v0.81.5 then adds explicit GD
+// trigger ORD values so each state's Gradient redraw executes deterministically
+// from Disable All -> farthest face -> nearest face.
 // Mobile UI layers load last.
 (()=>{
   const r=document.createElement('script');r.src='renderer_v081.js';
   r.onload=()=>{
     const rr=document.createElement('script');rr.src='renderer_v0814.js';
-    rr.onload=()=>loadMobile();
+    rr.onload=()=>{
+      const ro=document.createElement('script');ro.src='renderer_v0815.js';
+      ro.onload=()=>loadMobile();
+      ro.onerror=()=>{try{toast('v0.81.5 renderer patch failed; using v0.81.4')}catch(e){}loadMobile()};
+      document.head.appendChild(ro);
+    };
     rr.onerror=()=>{try{toast('v0.81.4 renderer failed to load; using v0.81 renderer')}catch(e){}loadMobile()};
     document.head.appendChild(rr);
   };
