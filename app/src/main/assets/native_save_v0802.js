@@ -19,6 +19,7 @@ function setFileLink(kind,text,filename,mime){
 // boundaries with projection-motion knots. v0.81.5 adds explicit GD trigger
 // ORD values for deterministic far->near Gradient redraws. v0.81.6 replaces
 // only the close-camera fallback with exact BSP ordering plus near-plane clipping.
+// v0.81.7 adds optional screen-space scene centering without rotating the camera.
 // Mobile UI layers load last.
 (()=>{
   const r=document.createElement('script');r.src='renderer_v081.js';
@@ -28,7 +29,12 @@ function setFileLink(kind,text,filename,mime){
       const ro=document.createElement('script');ro.src='renderer_v0815.js';
       ro.onload=()=>{
         const rn=document.createElement('script');rn.src='renderer_v0816.js';
-        rn.onload=()=>loadMobile();
+        rn.onload=()=>{
+          const rc=document.createElement('script');rc.src='screen_center_v0817.js';
+          rc.onload=()=>loadMobile();
+          rc.onerror=()=>{try{toast('v0.81.7 Center Lock failed; using v0.81.6')}catch(e){}loadMobile()};
+          document.head.appendChild(rc);
+        };
         rn.onerror=()=>{try{toast('v0.81.6 close-camera patch failed; using v0.81.5')}catch(e){}loadMobile()};
         document.head.appendChild(rn);
       };
