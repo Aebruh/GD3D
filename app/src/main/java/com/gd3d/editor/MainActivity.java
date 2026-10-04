@@ -161,7 +161,7 @@ public class MainActivity extends Activity {
                 webView = null;
             }
             TextView errorView = new TextView(this);
-            errorView.setText(message + "\n\nBuild: GD3D 0.80.1 startup-fix");
+            errorView.setText(message + "\n\nBuild: GD3D 0.80.6-alpha");
             errorView.setTextSize(16f);
             errorView.setTextColor(0xFFFFFFFF);
             errorView.setBackgroundColor(0xFF101217);
@@ -200,7 +200,7 @@ public class MainActivity extends Activity {
 
         @JavascriptInterface
         public String appVersion() {
-            return "0.80.1-alpha";
+            return "0.80.6-alpha";
         }
 
         @JavascriptInterface
