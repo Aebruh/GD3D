@@ -16,9 +16,9 @@ function setFileLink(kind,text,filename,mime){
 }
 
 // v0.81 base renderer loads first. v0.81.4 synchronizes exact BSP state
-// boundaries with projection-motion knots. v0.81.5 then adds explicit GD
-// trigger ORD values so each state's Gradient redraw executes deterministically
-// from Disable All -> farthest face -> nearest face.
+// boundaries with projection-motion knots. v0.81.5 adds explicit GD trigger
+// ORD values for deterministic far->near Gradient redraws. v0.81.6 replaces
+// only the close-camera fallback with exact BSP ordering plus near-plane clipping.
 // Mobile UI layers load last.
 (()=>{
   const r=document.createElement('script');r.src='renderer_v081.js';
@@ -26,7 +26,12 @@ function setFileLink(kind,text,filename,mime){
     const rr=document.createElement('script');rr.src='renderer_v0814.js';
     rr.onload=()=>{
       const ro=document.createElement('script');ro.src='renderer_v0815.js';
-      ro.onload=()=>loadMobile();
+      ro.onload=()=>{
+        const rn=document.createElement('script');rn.src='renderer_v0816.js';
+        rn.onload=()=>loadMobile();
+        rn.onerror=()=>{try{toast('v0.81.6 close-camera patch failed; using v0.81.5')}catch(e){}loadMobile()};
+        document.head.appendChild(rn);
+      };
       ro.onerror=()=>{try{toast('v0.81.5 renderer patch failed; using v0.81.4')}catch(e){}loadMobile()};
       document.head.appendChild(ro);
     };
