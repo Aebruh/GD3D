@@ -20,6 +20,7 @@ function setFileLink(kind,text,filename,mime){
 // ORD values for deterministic far->near Gradient redraws. v0.81.6 replaces
 // only the close-camera fallback with exact BSP ordering plus near-plane clipping.
 // v0.81.7 adds optional screen-space scene centering without rotating the camera.
+// v0.82.0 adds chunked long-scene side scrolling with reusable Gradient IDs.
 // Mobile UI layers load last.
 (()=>{
   const r=document.createElement('script');r.src='renderer_v081.js';
@@ -31,7 +32,12 @@ function setFileLink(kind,text,filename,mime){
         const rn=document.createElement('script');rn.src='renderer_v0816.js';
         rn.onload=()=>{
           const rc=document.createElement('script');rc.src='screen_center_v0817.js';
-          rc.onload=()=>loadMobile();
+          rc.onload=()=>{
+            const rs=document.createElement('script');rs.src='side_scroll_v0820.js';
+            rs.onload=()=>loadMobile();
+            rs.onerror=()=>{try{toast('v0.82 Side Scroll patch failed; using v0.81.7')}catch(e){}loadMobile()};
+            document.head.appendChild(rs);
+          };
           rc.onerror=()=>{try{toast('v0.81.7 Center Lock failed; using v0.81.6')}catch(e){}loadMobile()};
           document.head.appendChild(rc);
         };
