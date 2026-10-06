@@ -21,6 +21,7 @@ function setFileLink(kind,text,filename,mime){
 // only the close-camera fallback with exact BSP ordering plus near-plane clipping.
 // v0.81.7 adds optional screen-space scene centering without rotating the camera.
 // v0.82.0 adds chunked long-scene side scrolling with reusable Gradient IDs.
+// v0.82.1 prevents chunk mode from falling into Exact BSP and adds a large-scene preview.
 // Mobile UI layers load last.
 (()=>{
   const r=document.createElement('script');r.src='renderer_v081.js';
@@ -34,7 +35,12 @@ function setFileLink(kind,text,filename,mime){
           const rc=document.createElement('script');rc.src='screen_center_v0817.js';
           rc.onload=()=>{
             const rs=document.createElement('script');rs.src='side_scroll_v0820.js';
-            rs.onload=()=>loadMobile();
+            rs.onload=()=>{
+              const rf=document.createElement('script');rf.src='side_scroll_v0821.js';
+              rf.onload=()=>loadMobile();
+              rf.onerror=()=>{try{toast('v0.82.1 routing patch failed; using v0.82.0')}catch(e){}loadMobile()};
+              document.head.appendChild(rf);
+            };
             rs.onerror=()=>{try{toast('v0.82 Side Scroll patch failed; using v0.81.7')}catch(e){}loadMobile()};
             document.head.appendChild(rs);
           };
